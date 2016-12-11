@@ -1,0 +1,9 @@
+# Mac OS X
+*.DS_Store
+.AppleDouble
+*.d
+!*.c
+!*.cpp
+!*.h
+!*.hpp
+!*.txt
