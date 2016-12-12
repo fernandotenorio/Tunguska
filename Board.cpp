@@ -77,8 +77,7 @@ int Board::makeNullMove(){
 	histPly++;
 	ply++;
 
-	U64 tmpKey = Zobrist::getKey(*this);
-	assert(tmpKey == zKey);
+	assert(Zobrist::getKey(*this) == zKey);
 
 	return undo;
 }
@@ -101,8 +100,7 @@ void Board::undoNullMove(int undo){
 	histPly--;
 	ply--;
 
-	U64 tmpKey = Zobrist::getKey(*this);
-	assert(tmpKey == zKey);
+	assert(Zobrist::getKey(*this) == zKey);
 }
 
 int Board::makeMove(int move){
