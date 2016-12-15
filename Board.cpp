@@ -405,8 +405,7 @@ void Board::undoMove(int move, int undo){
 	ply--;
 
 	//DEBUG
-	U64 tmpKey = Zobrist::getKey(*this);
-	assert(tmpKey == zKey);
+	assert(Zobrist::getKey(*this) == zKey);
 }
 
 bool Board::isRepetition(){

@@ -116,7 +116,7 @@ void UCI::inputGo(std::string input){
 	if(time != -1){
 		info.timeSet = true;
 		time /= movesToGo;
-		time -= 50;
+		time -= 20;
 		info.stopTime = (info.startTime + time + inc);
 	}
 	
