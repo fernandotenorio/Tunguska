@@ -8,6 +8,8 @@
 #define ROOK_SEMIOPEN_FILE_BONUS 7
 #define QUEEN_OPEN_FILE_BONUS 7
 #define QUEEN_SEMIOPEN_FILE_BONUS 3
+#define BISHOP_PAIR_MG 25
+#define BISHOP_PAIR_EG 50
 
 #define PAWN_SQ {0, 0, 0, 0,  0,  0,  0,  0, 5, 10, 10,-20,-20, 10, 10,  5, 5, -5,-10,  0,  0,-10, -5,  5, 0,  0,  0, 20, 20,  0,  0,  0, 5,  5, 10, 25, 25, 10,  5,  5, 10, 10, 20, 30, 30, 20, 10, 10, 50, 50, 50, 50, 50, 50, 50, 50, 0,  0,  0,  0,  0,  0,  0,  0}						
 #define KNIGHT_SQ {-50,-40,-30,-30,-30,-30,-40,-50,-40, -20,  0,  5,  5,  0, -20, -40,-30,  5, 10, 15, 15, 10,  5, -30, -30,  0, 15, 20, 20, 15,  0,-30,-30,  5, 15, 20, 20, 15,  5,-30,-30,  0, 10, 15, 15, 10,  0, -30, -40, -20,  0,  0,  0,  0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50}							
@@ -15,7 +17,7 @@
 #define ROOK_SQ {-5, 0, 5, 10, 10, 5, 0, -5, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0,  0, 20, 20, 20, 20, 20, 20, 20, 20, 0,  0,  0,  0,  0,  0,  0,  0}
 #define QUEEN_SQ {-20,-10,-10, -5, -5,-10,-10,-20,-10,  0,  5,  0,  0,  0,  0,-10,-10,  5,  5,  5,  5,  5,  0,-10,0,   0,  5,  5,  5,  5,  0, -5,-5,   0,  5,  5,  5,  5,  0, -5,-10,  0,  5,  5,  5,  5,  0,-10,-10,  0,  0,  0,  0,  0,  0,-10,-20,-10,-10, -5, -5,-10,-10,-20}							
 #define KING_SQ {20, 30, 10,  0,  0, 10, 30, 20,20, 20,  0,  0,  0,  0, 20, 20,-10,-20,-20,-20,-20,-20,-20,-10,-20,-30,-30,-40,-40,-30,-30,-20,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30}							 
-#define KING_END_SQ {-50,	-40	,	0	,	0	,	0	,	0	,	-40	,	-50	, -20,	0	,	10	,	15	,	15	,	10	,	0	,	-20	, 0	,	10	,	20	,	20	,	20	,	20	,	10	,	0	, 0	,	10	,	30	,	40	,	40	,	30	,	10	,	0	, 0	,	10	,	20	,	40	,	40	,	20	,	10	,	0	, 0	,	10	,	20	,	20	,	20	,	20	,	10	,	0	, -10,	0	,	10	,	10	,	10	,	10	,	0	,	-10	, -50	,	-10	,	0	,	0	,	0	,	0	,	-10	,	-50}
+#define KING_END_SQ {-50, -40, 0, 0, 0,	0, -40,	-50, -20, 0, 10, 15, 15, 10, 0,	-20, 0,	10,	20,	20,	20,	20,	10,	0, 0, 10, 30, 40, 40, 30, 10, 0, 0,	10,	20,	40,	40,	20,	10,	0, 0, 10, 20, 20, 20, 20, 10, 0, -10, 0, 10, 10, 10, 10, 0,	-10, -50, -10,	0,	0,	0,	0, -10, -50}
 
 int Evaluation::PIECE_VALUES[14] = {0, 0, PAWN_VAL, -PAWN_VAL, KNIGHT_VAL, -KNIGHT_VAL, BISHOP_VAL,
 					-BISHOP_VAL, ROOK_VAL, -ROOK_VAL, QUEEN_VAL, -QUEEN_VAL, KING_VAL, -KING_VAL};
@@ -43,6 +45,46 @@ int Evaluation::ISOLATED_PAWN_PENALTY[8] = {-15, -10, -10, -10, -10, -10, -10, -
 int Evaluation::PASSED_PAWN_BONUS[2][8] = {{0, 5, 10, 20, 40, 90, 150, 200}, {200, 150, 90, 40, 20, 10, 5, 0}};
 int Evaluation::MIRROR64[64];
 
+int Evaluation::PAWN_CONNECTED_BONUS_MG[2][64] = {
+    { 0, 0, 0, 0, 0, 0, 0, 0,
+      2, 2, 2, 3, 3, 2, 2, 2,
+      4, 4, 5, 6, 6, 5, 4, 4,
+      7, 8,10,12,12,10, 8, 7,
+     11,14,17,21,21,17,14,11,
+     16,21,25,33,33,25,21,16,
+     32,42,50,55,55,50,42,32,
+      0, 0, 0, 0, 0, 0, 0, 0},
+      
+    { 0, 0, 0, 0, 0, 0, 0, 0,
+     32,42,50,55,55,50,42,32,
+     16,21,25,33,33,25,21,16,
+     11,14,17,21,21,17,14,11,
+      7, 8,10,12,12,10, 8, 7,
+      4, 4, 5, 6, 6, 5, 4, 4,
+      2, 2, 2, 3, 3, 2, 2, 2,
+      0, 0, 0, 0, 0, 0, 0, 0}
+};
+
+int Evaluation::PAWN_CONNECTED_BONUS_EG[2][64] = {
+    { 0, 0, 0, 0, 0, 0, 0, 0,
+      4, 4, 5, 6, 6, 5, 4, 4,
+      7, 8,10,12,12,10, 8, 7,
+     11,14,17,21,21,17,14,11,
+     16,21,25,33,33,25,21,16,
+     26,31,35,43,43,35,31,26,
+	 52,62,70,86,86,70,62,52,
+      0, 0, 0, 0, 0, 0, 0, 0},
+      
+    { 0, 0, 0, 0, 0, 0, 0, 0,
+     52,62,70,86,86,70,62,52,
+	 26,31,35,43,43,35,31,26,
+     16,21,25,33,33,25,21,16,
+     11,14,17,21,21,17,14,11,
+     7, 8,10,12,12,10, 8, 7,
+     4, 4, 5, 6, 6, 5, 4, 4,
+     0, 0, 0, 0, 0, 0, 0, 0}
+};
+
 void Evaluation::initAll(){
 	for (int i = 0; i < 64; i++){
 		int r = i/8;
@@ -51,6 +93,16 @@ void Evaluation::initAll(){
 		MIRROR64[i] = sqBlack;
 	}
 }	
+
+std::pair<int, int> Evaluation::evalBishops(Board& board){
+
+	int wb_cnt = BitBoardGen::popCount(board.bitboards[Board::WHITE_BISHOP]);
+	int bb_cnt = BitBoardGen::popCount(board.bitboards[Board::BLACK_BISHOP]);
+
+	std::pair<int, int> w_ev = wb_cnt > 1 ? std::make_pair(BISHOP_PAIR_MG, BISHOP_PAIR_EG) : std::make_pair(0, 0);
+	std::pair<int, int> b_ev = bb_cnt > 1 ? std::make_pair(BISHOP_PAIR_MG, BISHOP_PAIR_EG) : std::make_pair(0, 0);
+	return std::make_pair(w_ev.first - b_ev.first, w_ev.second - b_ev.second);
+}
 
 bool Evaluation::materialDraw(const Board& board){
 
@@ -286,12 +338,12 @@ int Evaluation::isolatedPawnsSide(Board& board, int side){
 }
 
 //connected passed bonus
-static int conn_bonus[9] = {0, 0, 20, 40, 80, 100, 120, 140, 160};
+//static int conn_bonus[9] = {0, 0, 20, 40, 80, 100, 120, 140, 160};
 int Evaluation::passedPawnsSide(Board& board, int side){
 	U64 pawns = board.bitboards[Board::PAWN | side];
 	U64 oppPawns = board.bitboards[side^1 | Board::PAWN];
 	int pp = 0;
-	int conn_file[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+	//int conn_file[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 	while (pawns != 0){
 		int sq = numberOfTrailingZeros(pawns);
@@ -299,12 +351,13 @@ int Evaluation::passedPawnsSide(Board& board, int side){
 		
 		if ((frontSpan & oppPawns) == 0){
 			pp += PASSED_PAWN_BONUS[side][sq >> 3];
-			conn_file[sq & 7] = 1;
+			//conn_file[sq & 7] = 1;
 		}
 		pawns&= pawns - 1;
 	}
 
 	//apply connected bonus
+	/*
 	int cnt = 0;
 	for (int i = 0; i < 8; ++i){
 		if (conn_file[i] == 0){
@@ -315,7 +368,31 @@ int Evaluation::passedPawnsSide(Board& board, int side){
 		}
 	}
 	pp+= conn_bonus[cnt];
+	*/
 	return pp;
+}
+
+//Connected pawns
+std::pair<int, int> Evaluation::pawnConnectedSide(Board& board, int side){
+	
+	int mg = 0;
+	int eg = 0;
+	U64 pawns = board.bitboards[Board::PAWN | side];
+	while(pawns){
+		int sq = numberOfTrailingZeros(pawns);
+		if (BitBoardGen::PAWN_CONNECTED[side][sq] & board.bitboards[Board::PAWN | side]){
+			mg+= PAWN_CONNECTED_BONUS_MG[side][sq];
+			eg+= PAWN_CONNECTED_BONUS_EG[side][sq];
+		}
+		pawns&= pawns - 1;
+	}
+	return std::make_pair(mg, eg);
+}
+
+std::pair<int, int> Evaluation::pawnConnected(Board& board){
+	std::pair<int, int> cp_w = pawnConnectedSide(board, Board::WHITE);
+	std::pair<int, int> cp_b = pawnConnectedSide(board, Board::BLACK);
+	return std::make_pair(cp_w.first - cp_b.first, cp_w.second - cp_b.second);
 }
 
 int Evaluation::pieceOpenFileSide(Board& board, int side, int pieceType, int bonusOpen, int bonusSemiOpen){
@@ -441,15 +518,10 @@ static int MOB_Q[2][28] = {{-40, -25, 2, 4, 14, 24, 25, 40, 43, 47, 54, 56, 60, 
 					128, 130, 133, 136, 140, 157, 158, 161, 174, 177, 191, 199}};
 
 
-//knight & bishop -> not attacked by opp pawns
-//rook -> not attacked by opp pawn minor
-//queen -> not attacked by opp pawn minor or rook
-//opp king included at attack square
-std::pair<int, int> Evaluation::mobility(Board& board, int side){
-
-	//Define this outside =p
-	int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
-	int diffs[2][2] = {{7, -9}, {9, -7}};
+//Mobility
+static int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
+static int diffs[2][2] = {{7, -9}, {9, -7}};
+std::pair<int, int> Evaluation::mobilitySide(Board& board, int side){
 	
 	int opp = side^1;
 	U64 oppPawnBB = board.bitboards[Board::PAWN | opp];
@@ -463,110 +535,65 @@ std::pair<int, int> Evaluation::mobility(Board& board, int side){
 			oppPawnAttacks|= BitBoardGen::circular_lsh(oppPawnBB, dir[opp]) & ~wFile;
 		}
 	}
-
-	U64 enemyOrEmpty = ~board.bitboards[side] & ~board.bitboards[Board::KING | opp];
-	U64 notOppPawnAttacks = ~oppPawnAttacks;
 	
-	//Knight
-	U64 safeKN = 0;
+	U64 king = board.bitboards[Board::KING | side];
+	U64 blockedPawns = 0;
+	if (side == Board::WHITE)
+		blockedPawns = ((board.bitboards[Board::WHITE_PAWN] << 8) & board.bitboards[Board::BLACK]) >> 8;
+	else
+		blockedPawns = ((board.bitboards[Board::BLACK_PAWN] >> 8) & board.bitboards[Board::WHITE]) << 8;
+	
+	U64 mobilityArea = ~(oppPawnAttacks | king | blockedPawns);
+	int mg = 0;
+	int eg = 0;
+	
+	//knights
 	U64 kns = board.bitboards[Board::KNIGHT | side];
-	int mobKN = 0;
+	U64 attacks = 0;
 	while (kns != 0){
 		int from = numberOfTrailingZeros(kns);
-		U64 targets = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from] & notOppPawnAttacks & enemyOrEmpty;
-		safeKN |= targets;
-		mobKN+= BitBoardGen::popCount(targets);
-		kns &= kns - 1;
+		attacks|= BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
+		kns&= kns - 1;
 	}
+	int n = BitBoardGen::popCount(attacks & mobilityArea);
+	mg+= MOB_N[0][n];
+	eg+= MOB_N[1][n];
 	
-	//DEBUG
-	//printf("Save KN mob\n");
-	//BitBoardGen::printBB(safeKN);
-	
-	//Bishop
-	U64 safeBish = 0;
-	U64 occup = board.bitboards[side] | board.bitboards[opp];
-	U64 bishops = board.bitboards[Board::BISHOP | side];
-	int mobBS = 0;
-	while (bishops != 0){
-		int from = numberOfTrailingZeros(bishops);
-		U64 targets = MoveGen::bishopAttacks(board, occup, from, side) & notOppPawnAttacks & enemyOrEmpty;
-		safeBish |= targets;
-		mobBS+= BitBoardGen::popCount(targets);
-		bishops&= bishops - 1;
+	//bishops
+	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+	U64 bhs = board.bitboards[Board::BISHOP | side];
+	attacks = 0;
+	while (bhs != 0){
+		int from = numberOfTrailingZeros(bhs);
+		attacks|= MoveGen::bishopAttacks(board, occup, from, side);
+		bhs&= bhs - 1;
 	}
-	
-	//DEBUG
-	//printf("Save BSHP mob\n");
-	//BitBoardGen::printBB(safeBish);
-	
-	//Rook
-	//First get opp Knight and Bishop attacks
-	U64 oppKN = board.bitboards[Board::KNIGHT | opp];
-	U64 oppKNAttacks = 0;
-	while(oppKN){
-		int from = numberOfTrailingZeros(oppKN);
-		oppKNAttacks|= BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
-		oppKN &= oppKN - 1;
-	}
-	
-	U64 oppBishops = board.bitboards[Board::BISHOP | opp];
-	U64 oppBishopAttacks = 0;
-	while(oppBishops){
-		int from = numberOfTrailingZeros(oppBishops);
-		oppBishopAttacks|= MoveGen::bishopAttacks(board, occup, from, opp);
-		oppBishops &= oppBishops - 1;
-	}
-	
-	U64 notOppMinorAttacks = notOppPawnAttacks & ~(oppBishopAttacks | oppKNAttacks);
+	n = BitBoardGen::popCount(attacks & mobilityArea);
+	mg+= MOB_B[0][n];
+	eg+= MOB_B[1][n];
+
+	//rooks
 	U64 rooks = board.bitboards[Board::ROOK | side];
-	int mobRK = 0;
-	U64 safeRook = 0;
-	while(rooks){
+	attacks = 0;
+	while (rooks != 0){
 		int from = numberOfTrailingZeros(rooks);
-		U64 targets = MoveGen::rookAttacks(board, occup, from, side) & notOppMinorAttacks & enemyOrEmpty;
-		safeRook |= targets;
-		mobRK+= BitBoardGen::popCount(targets);
+		attacks|= MoveGen::rookAttacks(board, occup, from, side);
 		rooks&= rooks - 1;
 	}
+	n = BitBoardGen::popCount(attacks & mobilityArea);
+	mg+= MOB_R[0][n];
+	eg+= MOB_R[1][n];
 	
-	//DEBUG
-	//printf("Save ROOK mob\n");
-	//BitBoardGen::printBB(safeRook);
-	
-	//Queen
-	//Need to exclude opp Rook attacks
-	U64 oppRookAttacks = 0;
-	U64 oppRooks = board.bitboards[Board::ROOK | opp];
-	while(oppRooks){
-		int from = numberOfTrailingZeros(oppRooks);
-		oppRookAttacks|= MoveGen::rookAttacks(board, occup, from, opp);
-		oppRooks&= oppRooks - 1;
-	}
-	
-	notOppMinorAttacks&= ~oppRookAttacks;
-	U64 queens = board.bitboards[Board::QUEEN | side];
-	U64 safeQ = 0;
-	int mobQ = 0;
-	while(queens){
-		int from = numberOfTrailingZeros(queens);
-		U64 rookAtt = MoveGen::rookAttacks(board, occup, from, side);
-		U64 bishopAtt = MoveGen::bishopAttacks(board, occup, from, side);
-		U64 targets = (rookAtt | bishopAtt) & notOppMinorAttacks & enemyOrEmpty;
-		safeQ |= targets;
-		mobQ+= BitBoardGen::popCount(targets);
-		queens&= queens - 1;
-	}
-	
-	//DEBUG
-	//printf("Save QUEEN mob\n");
-	//BitBoardGen::printBB(safeQ);
-	
-	int mobBonusOpen = MOB_N[0][mobKN] + MOB_B[0][mobBS] + MOB_Q[0][mobQ] + MOB_R[0][mobRK];
-	int mobBonusEnd = MOB_N[1][mobKN] + MOB_B[1][mobBS] + MOB_Q[1][mobQ] + MOB_R[1][mobRK];
-	//p.first, p.second
-	return std::make_pair(mobBonusOpen, mobBonusEnd);
+	//No queen mobility
+	return std::make_pair(mg, eg);
 }
+
+std::pair<int, int> Evaluation::mobility(Board& board){
+	std::pair<int, int> w_mob = mobilitySide(board, Board::WHITE);
+	std::pair<int, int> b_mob = mobilitySide(board, Board::BLACK);
+	return std::make_pair(w_mob.first - b_mob.first, w_mob.second - b_mob.second);
+}
+
 
 Board Evaluation::mirrorBoard(Board& board){
 	Board mBoard;
@@ -654,10 +681,8 @@ int Evaluation::get_phase(Board& board){
 	return (phase * 256 + (total_phase / 2)) / total_phase;
 }
 
-//r1b1k2r/pp1p1pp1/4p2p/1P5q/1Qn1NP1P/4BP2/P3K1P1/R4B1R b kq - 0 17    move d7d5 kn capture ep!!
 //ELO diff formula -400*log(1/p - 1)/log(10), p = win rate (with draws)
-//5R2/8/8/3BK2p/7k/6p1/8/8 w - - 2 62 score = MATE
-//r2q1rk1/pppb1ppp/3p1nn1/3Pp3/2P1P3/2B2N1P/PPQ2PP1/3RKB1R w K - 3 12 played e1e2??
+//5R2/8/8/3BK2p/7k/6p1/8/8 w - - 2 62 MATE test
 int Evaluation::evaluate(Board& board, int side){
 
 	if (materialDraw(board))
@@ -672,25 +697,26 @@ int Evaluation::evaluate(Board& board, int side){
 	int heavyOpen = pieceOpenFile(board);
 	int kingSafe = kingAttacked(board, Board::BLACK) - kingAttacked(board, Board::WHITE);
 	int kingShelter = kingShelterSide(board, Board::WHITE) - kingShelterSide(board, Board::BLACK);
-	/*
-	std::pair<int, int> mob_w = mobility(board, Board::WHITE);
-	std::pair<int, int> mob_b = mobility(board, Board::BLACK);
-	int mob_open = mob_w.first - mob_b.first;
-	int mob_end = mob_w.second - mob_b.second;
-	*/
 
+	std::pair<int, int> pawnConn = pawnConnected(board);
+	//std::pair<int, int> mob = mobility(board);
+	
 	//endgame
 	int pieceValEnd = pieceSquaresBalanceEnd(board);
-	//int pawnDist = kingDistToEnemyPawns(board);
+
+	//bishops
+	std::pair<int, int>bishop_eval = evalBishops(board);
 
 	int phase = get_phase(board);
-	int opening = mat + pieceVal + isoPawns + passPawns + heavyOpen + kingShelter + kingSafe;// + mob_open;
-	int endgame = mat + pieceValEnd + isoPawns + passPawns;// + mob_end;
+
+	int opening = mat + pieceVal + isoPawns + passPawns + heavyOpen + kingShelter + kingSafe + 
+		pawnConn.first + bishop_eval.first;
+
+	int endgame = mat + pieceValEnd + isoPawns + passPawns + 
+		pawnConn.second + bishop_eval.second;
 
 	int eval = ((opening * (256 - phase)) + (endgame * phase))/256;
-	eval = side == Board::WHITE ? eval : -eval;
-
-	return eval;
+	return side == Board::WHITE ? eval : -eval;
 }
 
 #include <fstream>

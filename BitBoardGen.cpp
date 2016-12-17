@@ -514,6 +514,72 @@ void BitBoardGen::initLines(){
 	}
 }
 
+U64 BitBoardGen::PAWN_CONNECTED[2][64];
+void BitBoardGen::initPawnConnected(){
+	for (int i = 0; i < 64; i++){
+		PAWN_CONNECTED[Board::WHITE][i] = 0;
+		PAWN_CONNECTED[Board::BLACK][i] = 0;
+	}
+	
+	for (int i = 8 ; i < 56; i++){
+        int file = i % 8;
+        
+        if (file == 0){
+            PAWN_CONNECTED[Board::WHITE][i] = (ONE << (i+1)) | (ONE << (i-7));
+            PAWN_CONNECTED[Board::BLACK][i] = (ONE << (i+1)) | (ONE << (i+9));
+        }
+        
+        else if (file == 7){
+            PAWN_CONNECTED[Board::WHITE][i] = (ONE << (i-1)) | (ONE << (i-9));
+            PAWN_CONNECTED[Board::BLACK][i] = (ONE << (i-1)) | (ONE << (i+7));
+        }
+        
+        else {
+            PAWN_CONNECTED[Board::WHITE][i] = (ONE << (i-1)) | (ONE << (i-9)) | (ONE << (i+1)) | (ONE << (i-7));
+            PAWN_CONNECTED[Board::BLACK][i] = (ONE << (i-1)) | (ONE << (i+7)) | (ONE << (i+1)) | (ONE << (i+9));
+        }
+    }
+}
+
+U64 BitBoardGen::SPACE_MASK[2];
+U64 BitBoardGen::QUEENSIDE_MASK;
+U64 BitBoardGen::KINGSIDE_MASK;
+void BitBoardGen::initSpaceMasks(){
+	char bitString[8][8];
+
+	//white rank 2 to 4
+	emptyBitString(bitString);
+	for (int r = 2; r <= 4; r++)
+		for (int c = 0; c < 8; c++)
+			bitString[r][c] = '1';
+
+	SPACE_MASK[Board::WHITE] = bitboardFromBitString(bitString);	
+	
+	//black rank 3 to 5
+	emptyBitString(bitString);
+	for (int r = 3; r <= 5; r++)
+		for (int c = 0; c < 8; c++)
+			bitString[r][c] = '1';
+
+	SPACE_MASK[Board::BLACK] = bitboardFromBitString(bitString);
+
+	//Queenside
+	emptyBitString(bitString);
+	for (int col = 0; col < 4; col++)
+		for (int r = 0; r < 8; r++)
+			bitString[r][col] = '1';
+
+	QUEENSIDE_MASK = bitboardFromBitString(bitString);
+
+	//Kingside
+	emptyBitString(bitString);
+	for (int col = 4; col < 8; col++)
+		for (int r = 0; r < 8; r++)
+			bitString[r][col] = '1';
+
+	KINGSIDE_MASK = bitboardFromBitString(bitString);
+}
+
 /*
 U64 BitBoardGen::ROOK_RAYS[64];
 U64 BitBoardGen::BISHOP_RAYS[64];
@@ -549,5 +615,7 @@ void BitBoardGen::initAll(){
 	BitBoardGen::initDistances();
 	BitBoardGen::generateKingAhead();
 	BitBoardGen::initLines();
+	BitBoardGen::initPawnConnected();
+	BitBoardGen::initSpaceMasks();
 	//BitBoardGen::initSliderRays();
 }

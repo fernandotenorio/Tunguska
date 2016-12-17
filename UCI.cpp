@@ -46,10 +46,14 @@ void UCI::uciLoop(){
 		else if ("stop" == input){
 			search.stop();
 		}
+		/* To catch movegen bugs. All tests should pass! */
 		else if ("perft" == input){
 			Perft::runAll("perft.txt");
 		}
-		/* Mirror eval test
+		/* Mirror eval: to catch eval bugs. Provide a file with lots of FEN strings, one per line
+		Tunguska uses a 3.5GB file with 57324793 positions =-D
+		*/
+		/*
 		else if ("eval" == input){
 			Evaluation::testEval("positions.fen");
 		}

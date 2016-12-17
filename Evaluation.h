@@ -30,6 +30,8 @@ class Evaluation{
 	static int PIECE_SQUARES_END[14][64];
 	static int ISOLATED_PAWN_PENALTY[8];
 	static int PASSED_PAWN_BONUS[2][8];
+	static int PAWN_CONNECTED_BONUS_MG[2][64];
+	static int PAWN_CONNECTED_BONUS_EG[2][64];
 
 	static bool materialDraw(const Board& board);
 	static int materialValueSide(Board& board, int side);
@@ -46,7 +48,11 @@ class Evaluation{
 	static int kingDistToEnemyPawnsSide(Board& board, int side);
 	static int kingDistToEnemyPawns(Board& board);
 	static int kingShelterSide(Board& board, int side);
-	static std::pair<int, int> mobility(Board& board, int side);
+	static std::pair<int, int> mobilitySide(Board& board, int side);
+	static std::pair<int, int> mobility(Board& board);
+	static std::pair<int, int> pawnConnectedSide(Board& board, int side);
+	static std::pair<int, int> pawnConnected(Board& board);
+	static std::pair<int, int> evalBishops(Board& board);
 
 	static int get_phase(Board& board);
 	static int countMaterial(Board& board, int piece);

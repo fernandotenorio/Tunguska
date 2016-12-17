@@ -280,7 +280,6 @@ int Board::makeMove(int move){
 		//set castle
 		zKey = Zobrist::xorCastle(zKey, BoardState::castle_key(state));
 
-
 		//DEBUG
 		assert(Zobrist::getKey(*this) == zKey);
 		

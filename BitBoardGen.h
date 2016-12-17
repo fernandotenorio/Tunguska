@@ -37,12 +37,19 @@ class BitBoardGen{
 		static U64 SQUARES[64];
 		static U64 DISTANCE_SQS[64][64];
 		static U64 LINES_BB[64][64];
+		static U64 PAWN_CONNECTED[2][64];
+
+		//space masks
+		static U64 SPACE_MASK[2];
+		static U64 QUEENSIDE_MASK;
+		static U64 KINGSIDE_MASK;
 
 		//static U64 ROOK_RAYS[64];
 		//static U64 BISHOP_RAYS[64];
 		//static U64 QUEEN_RAYS[64];
 
-		static void initSliderRays();
+		//static void initSliderRays();
+		static void initSpaceMasks();
 
 		static U64 setBit(U64 bb, int idx);
 		static U64 zeroBit(U64 bb, int idx);
@@ -64,6 +71,7 @@ class BitBoardGen{
 		static void initSquares();
 		static void initDistances();
 		static void initLines();
+		static void initPawnConnected();
 		static void initAll();
 
 		static int popCount(U64 bb){
