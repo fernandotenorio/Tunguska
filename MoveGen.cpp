@@ -892,3 +892,4 @@ void MoveGen::getEvasions(const Board& board, int side, MoveList& moves){
 	//queenMoves(board, side, moves);
 }
 
+

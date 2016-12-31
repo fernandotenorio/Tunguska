@@ -44,11 +44,14 @@ class BitBoardGen{
 		static U64 QUEENSIDE_MASK;
 		static U64 KINGSIDE_MASK;
 
+		static U64 LIGHT_DARK_SQS[2];
+		static int COLOR_OF_SQ[64];
+
 		//static U64 ROOK_RAYS[64];
 		//static U64 BISHOP_RAYS[64];
 		//static U64 QUEEN_RAYS[64];
 
-		//static void initSliderRays();
+		static void initSliderRays();
 		static void initSpaceMasks();
 
 		static U64 setBit(U64 bb, int idx);
@@ -72,6 +75,7 @@ class BitBoardGen{
 		static void initDistances();
 		static void initLines();
 		static void initPawnConnected();
+		static void initColorSquares();
 		static void initAll();
 
 		static int popCount(U64 bb){

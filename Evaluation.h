@@ -3,10 +3,21 @@
 
 #include "Board.h"
 
+enum ending_type {KNB_K, KRR_KQ, OTHER_ENDING}; 
+
+struct AttackInfo{
+	
+	//U64 pawns[2];
+	U64 rooks[2];
+	U64 knights[2];
+	U64 bishops[2];
+	U64 queens[2];
+};
+
 class Evaluation{
 	
 	public:
-	static int evaluate(Board& board, int side);
+	static int evaluate(const Board& board, int side);
 
 	static const int PAWN_VAL = 100;
 	static const int KNIGHT_VAL = 320;
@@ -14,52 +25,32 @@ class Evaluation{
 	static const int ROOK_VAL = 500;
 	static const int QUEEN_VAL = 1000;
 	static const int KING_VAL = 20000;
-
-	static int MIRROR64[64];
-	static int PAWN_SQ[64];							
-	static int KNIGHT_SQ[64];							
-	static int BISHOP_SQ[64];						  
-	static int ROOK_SQ[64];							 
-	static int QUEEN_SQ[64];
-	static int KING_SQ[64];							
-	static int KING_END_SQ[64];
-
-	//idx => Board Piece code
+	
 	static int PIECE_VALUES[14];
-	static int PIECE_SQUARES[14][64];
+	static int PIECE_SQUARES_MG[14][64];
 	static int PIECE_SQUARES_END[14][64];
-	static int ISOLATED_PAWN_PENALTY[8];
-	static int PASSED_PAWN_BONUS[2][8];
-	static int PAWN_CONNECTED_BONUS_MG[2][64];
-	static int PAWN_CONNECTED_BONUS_EG[2][64];
+	static int MIRROR64[64];
 
+	static void materialBalance(const Board& board, int& mg, int& eg);
+	static void pieceSquaresBalance(const Board& board, int& mg, int& eg);
+	static void evalPawns(const Board& board, int& mg, int& eg);
 	static bool materialDraw(const Board& board);
-	static int materialValueSide(Board& board, int side);
-	static int materialBalance(Board& board);
-	static int pieceSquaresBalance(Board& board);
-	static int pieceSquaresBalanceEnd(Board& board);
-	static int kingAttacked(Board& board, int side);
-	static int isolatedPawnsSide(Board& board, int side);
-	static int passedPawnsSide(Board& board, int side);
-	static int isolatedPawns(Board& board);
-	static int passedPawns(Board& board);
-	static int pieceOpenFileSide(Board& board, int side, int pieceType, int bonusOpen, int bonusSemiOpen);
-	static int pieceOpenFile(Board& board);
-	static int kingDistToEnemyPawnsSide(Board& board, int side);
-	static int kingDistToEnemyPawns(Board& board);
-	static int kingShelterSide(Board& board, int side);
-	static std::pair<int, int> mobilitySide(Board& board, int side);
-	static std::pair<int, int> mobility(Board& board);
-	static std::pair<int, int> pawnConnectedSide(Board& board, int side);
-	static std::pair<int, int> pawnConnected(Board& board);
-	static std::pair<int, int> evalBishops(Board& board);
-
-	static int get_phase(Board& board);
-	static int countMaterial(Board& board, int piece);
-	static Board mirrorBoard(Board& board);
+	static void pieceOpenFile(const Board& board, int& mg, int& eg);
+	static void kingAttack(const Board& board, int& mg);
+	static int kingAttackedSide(const Board& board, int side);
+	static void kingShelter(const Board& board, int& mg);
+	static int countMaterial(const Board& board, int piece);
+	static int materialValueSide(const Board& board, int side);
+	static void evalBishops(const Board& board, int& mg, int& eg);
+	static void evalRooks(const Board& board, int& mg, int& eg);
+	static void mobility(const Board& board, int& mg, int& eg);
+	static int evalKBN_K(const Board& board, int side);
+	
+	static Board mirrorBoard(const Board& board);
 	static void testEval(std::string test_file);
+	static int get_phase(const Board& board);
+	static ending_type get_ending(const Board& board);
 	static void initAll();
-					
 };
 
 #endif

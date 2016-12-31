@@ -33,6 +33,7 @@ class Search{
 	private:
 		//PV > Capture > Killer > Hist
 		static const int PV_BONUS = 2000000;
+		static const int PROMO_BONUS = 1500000;
 		static const int CAPT_BONUS = 1000000;
 		static const int KILLER_BONUS_0 = 900000;
 		static const int KILLER_BONUS_1 = 800000;
@@ -61,6 +62,7 @@ class Search{
 		static void orderMoves(Board& board, MoveList& moves, int pvMove);
 		void search();
 		int alphaBeta(int alpha, int beta, int depth, bool doNull);
+		static bool isBadCapture(const Board& board, int move, int side);
 	
 };
 

@@ -46,18 +46,12 @@ void UCI::uciLoop(){
 		else if ("stop" == input){
 			search.stop();
 		}
-		/* To catch movegen bugs. All tests should pass! */
 		else if ("perft" == input){
 			Perft::runAll("perft.txt");
 		}
-		/* Mirror eval: to catch eval bugs. Provide a file with lots of FEN strings, one per line
-		Tunguska uses a 3.5GB file with 57324793 positions =-D
-		*/
-		/*
 		else if ("eval" == input){
-			Evaluation::testEval("positions.fen");
+			Evaluation::testEval("/Users/fernandomiranda/unique00.fen");
 		}
-		*/
 	}
 }
 
@@ -189,23 +183,13 @@ int main(){
 	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
 	std::cout << "Perft(6) time: " << elapsed_secs << std::endl;
 	*/
-	
+
 	UCI uci;
 	uci.uciLoop();
-
 	/*
-	MoveList moves;
-	Board board = FenParser::parseFEN("Q2k4/8/8/8/7K/8/7p/8 b - -");
+	Board board = FenParser::parseFEN("rnbqkbnr/ppp1pppp/2p5/4P3/4P3/4P3/P1P3PP/RNBQKBNR w KQkq -");
+	int ev = Evaluation::evaluate(board, 0);
 	board.print();
-	MoveGen::getEvasions(board, 1, moves);
-	for (int i=0; i<moves.size(); i++){
-		Move::print(moves.get(i));
-		std::cout<<"------"<<std::endl;
-	}
 	*/
-
-	//Perft::divide("1r3K2/2P5/5k2/8/8/8/8/8 w - -", 6);
-	//Perft::divide("8/Pk6/8/8/8/8/6Kp/8 w - - 0 1", 6);
-	
 	return 0;
 }

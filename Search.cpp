@@ -86,21 +86,27 @@ void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
 				//test piece squares ordering
 				if (moveScore[i].score == 0){
 					if (side == Board::WHITE)
-						moveScore[i].score = Evaluation::PIECE_SQUARES[piece][to];
+						moveScore[i].score = Evaluation::PIECE_SQUARES_MG[piece][to];
 					else
-						moveScore[i].score = Evaluation::PIECE_SQUARES[piece][Evaluation::MIRROR64[to]];
+						moveScore[i].score = Evaluation::PIECE_SQUARES_MG[piece][Evaluation::MIRROR64[to]];
 				}
 			}
 		}
 
+		if (promo){
+			moveScore[i].score = PROMO_BONUS + abs(Evaluation::PIECE_VALUES[promo]);
+		}
+		
 		//PV override
 		if (mv == pvMove)
 			moveScore[i].score = PV_BONUS;
 	}
 	
 	std::sort(moveScore.begin(), moveScore.begin() + moves.size(), std::less<MoveScore>());
-	for (int i = 0; i < moves.size(); i++)
+	
+	for (int i = 0; i < moves.size(); i++){
 		moves.set(i, moveScore[i].move);
+	}
 }
 
 void Search::clearSearch(){
@@ -169,6 +175,7 @@ void Search::search(){
 }
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 500};
+static const int RAZOR_MARGIN[4] = {0, 325, 345, 395};
 int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	
 	/*if (depth == 0){
@@ -214,12 +221,19 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return score;
 	}
 
-	/* //eval pruning
+	// Eval pruning 
+	int static_eval = 0;
+	bool static_set = false;
+	/*
+
 	if (depth < 3 && !atCheck && abs(beta - 1) > -INFINITE + 100){
-		int static_eval =  Evaluation::evaluate(board, side);
+		static_eval =  Evaluation::evaluate(board, side);
+		static_set = true;
 		int eval_margin = 120 * depth;
+
 		if (static_eval - eval_margin >= beta)
-			return static_eval - eval_margin;
+			//return static_eval - eval_margin;
+			return beta;
 	}
 	*/
 
@@ -242,12 +256,33 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 	//null move pruning
 
-	//Futility pruning
-	int f_prune = 0;
-	if (depth <= 3 && !atCheck && abs(alpha) < 9000 && 
-		Evaluation::evaluate(board, BoardState::currentPlayer(board.state)) + FUTIL_MARGIN[depth] <= alpha)
-		f_prune = 1;
+	//Razoring pruning
+	/*
+	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck && doNull){
+		static_eval = static_set ? static_eval : Evaluation::evaluate(board, side);
+		static_set = true;
+		
+		int threshold = alpha - 300 - (depth - 1) * 60;
+		if (static_eval < threshold){
+			int val = Quiescence(alpha, beta);
 
+			if (val < threshold)
+				return alpha;
+		}
+	}
+	//end of Razoring pruning
+	*/
+
+	//Futility pruning
+	bool f_prune = false;
+	if (depth <= 3 && !atCheck && abs(alpha) < 9000){
+		static_eval = static_set ? static_eval : Evaluation::evaluate(board, side);
+		static_set = true;
+
+		if (static_eval + FUTIL_MARGIN[depth] <= alpha)
+			f_prune = true;
+	} 
+	
 	//Move list
 	MoveList moves;
 	MoveGen::pseudoLegalMoves(board, side, moves, atCheck);
@@ -406,10 +441,18 @@ int Search::Quiescence(int alpha, int beta){
 	if (score > alpha){
 		alpha = score;
 	}
-	
-	//All caps
+
+	int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
+	bool atCheck = MoveGen::isSquareAttacked(board, ks, opp);
 	MoveList moves;
 	MoveGen::pseudoLegalCaptureMoves(board, side, moves);
+
+	/*
+	if (atCheck)	
+		MoveGen::MoveGen::getEvasions(board, side, moves);
+	else
+		MoveGen::pseudoLegalCaptureMoves(board, side, moves);
+	*/
 
 	//PV move
 	//int pvMove = PVTable::probe(board);
@@ -421,8 +464,7 @@ int Search::Quiescence(int alpha, int beta){
 	int oldAlpha = alpha;
 	int bestMove = Move::NO_MOVE;
 	score = -INFINITE;
-	int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
-	bool atCheck = MoveGen::isSquareAttacked(board, ks, opp);
+	
 	U64 pinned = MoveGen::pinnedBB(board, side, ks);
 	
 	//Loop through captures
@@ -437,10 +479,20 @@ int Search::Quiescence(int alpha, int beta){
 		int promo = Move::promoteTo(moves.get(i));
 
 		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) &&
-			(Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > 1300) && (promo == 0)){
+			(Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > 1300) && (promo == 0)) {
 			continue;
 		}
 		//Delta cutoff
+
+		//bad captures
+		/*
+		if (isBadCapture(board, moves.get(i), side) && (promo == 0)) {
+			//can simplify
+			bool cantSimplify = (capt - side == Board::PAWN) || (Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > 1300);
+			if (cantSimplify)
+				continue;
+		}
+		*/
 
 		int undo = board.makeMove(moves.get(i));
 		score = -Quiescence(-beta, -alpha);
@@ -474,6 +526,35 @@ int Search::Quiescence(int alpha, int beta){
 	return alpha;
 }
 
+bool Search::isBadCapture(const Board& board, int move, int side){
+	
+	int from = Move::from(move);
+	int pieceFrom = board.board[from];
 
+	if (pieceFrom - side == Board::PAWN){
+		return false;
+	}
+
+	int to = Move::to(move);
+	int capt = Move::captured(move);
+
+	if (abs(Evaluation::PIECE_VALUES[capt]) >= abs(Evaluation::PIECE_VALUES[pieceFrom]) - 50){
+		return false;
+	}
+
+	int opp = side^1;
+	//rook takes kn 325 + 200 < 500 (false, allowed)
+	//minor takes p 100 + 200 < 325 (true, not allowed) //change to allow sacrifice 
+	if ((BitBoardGen::BITBOARD_PAWN_ATTACKS[side][to] & board.bitboards[Board::PAWN | opp]) && 
+		abs(Evaluation::PIECE_VALUES[capt]) + 200 < abs(Evaluation::PIECE_VALUES[pieceFrom]))
+		return true;
+
+	if (abs(Evaluation::PIECE_VALUES[capt]) + 500 < abs(Evaluation::PIECE_VALUES[pieceFrom])){
+
+		if (BitBoardGen::BITBOARD_KNIGHT_ATTACKS[to] & board.bitboards[Board::KNIGHT | opp])
+			return true;
+	}
+	return false;
+}
 
 

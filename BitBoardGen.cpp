@@ -580,6 +580,26 @@ void BitBoardGen::initSpaceMasks(){
 	KINGSIDE_MASK = bitboardFromBitString(bitString);
 }
 
+U64 BitBoardGen::LIGHT_DARK_SQS[2];
+int BitBoardGen::COLOR_OF_SQ[64];
+void BitBoardGen::initColorSquares(){
+		char bitString[8][8];
+		emptyBitString(bitString);
+		
+		for (int i = 0; i < 8; i++){
+				for (int  j = 0; j < 8; j++){
+						if ((i + j) % 2){
+							bitString[i][j] = '1';
+							COLOR_OF_SQ[i * 8 + j] = 0;
+						} else{
+							COLOR_OF_SQ[i * 8 + j] = 1;
+						}
+				}
+		}
+		LIGHT_DARK_SQS[0] = bitboardFromBitString(bitString);
+		LIGHT_DARK_SQS[1] = ~LIGHT_DARK_SQS[0];
+}
+
 /*
 U64 BitBoardGen::ROOK_RAYS[64];
 U64 BitBoardGen::BISHOP_RAYS[64];
@@ -617,5 +637,6 @@ void BitBoardGen::initAll(){
 	BitBoardGen::initLines();
 	BitBoardGen::initPawnConnected();
 	BitBoardGen::initSpaceMasks();
+	BitBoardGen::initColorSquares();
 	//BitBoardGen::initSliderRays();
 }
