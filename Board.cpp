@@ -185,9 +185,7 @@ BoardState Board::makeMove(int move){
 		zKey = Zobrist::xorSquare(zKey, movingPiece, from);	
 		zKey = Zobrist::xorSquare(zKey, promoteTo, to);
 	}
-	else if (isCastle){
-		
-		//sq = [k_from, k_to, rook_from, rook_to]
+	else if (isCastle){		
 		int *sq = CASTLE_SQS[from][side];
 		board[sq[0]] = EMPTY;
 		board[sq[2]] = EMPTY;
@@ -370,17 +368,6 @@ void Board::undoMove(int move, BoardState undo){
 	//update king square
 	if (movingPiece >= WHITE_KING && !isCastle){
 		kingSQ[side] = from;
-		
-		//r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1
-		/*
-		int wk = numberOfTrailingZeros(bitboards[WHITE_KING]);
-		int bk = numberOfTrailingZeros(bitboards[BLACK_KING]);
-		printf("side=%d from=%d to=%d wk=%d bk=%d\n", side, from, to, wk, bk);
-		std::cout << Move::toLongNotation(move) << std::endl;
-		BitBoardGen::printBB(bitboards[WHITE_KING]);
-		BitBoardGen::printBB(bitboards[BLACK_KING]);
-		print();
-		*/
 	}
 	
 	if (isPJ){
@@ -392,8 +379,7 @@ void Board::undoMove(int move, BoardState undo){
 		bitboards[side] = BitBoardGen::zeroBit(bitboards[side], to);
 
 		//Zobrist xor out from xor in to, xor in new ep
-		zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);
-		//zKey = Zobrist.xorEP(zKey, BoardState.epSquare(this.state));
+		zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);		
 	}
 	else if(promoteTo != EMPTY){
 			board[from] = PAWN | side;
