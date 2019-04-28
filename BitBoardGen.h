@@ -28,16 +28,23 @@ class BitBoardGen{
 		static U64 BITBOARD_KNIGHT_ATTACKS[64];
 		static U64 BITBOARD_RANKS[8];
 		static U64 BITBOARD_FILES[8];
+		static U64 CENTER_FILES;
 		static U64 KS_CASTLE_OCCUP[2];
 		static U64 QS_CASTLE_OCCUP[2];
 		static U64 WRAP_FILES[2];
 		static U64 RECT_LOOKUP[64][64];
 		static U64 ADJACENT_FILES[8];
 		static U64 FRONT_SPAN[2][64];
+
+		static U64 SQUARES_AHEAD[2][64];
+		static U64 SQUARES_BEHIND[2][64];
+
+		static U64 FRONT_ATTACK_SPAN[2][64];
 		static U64 SQUARES[64];
 		static U64 DISTANCE_SQS[64][64];
 		static U64 LINES_BB[64][64];
 		static U64 PAWN_CONNECTED[2][64];
+		static U64 RANKS_4_5_6_7[2];
 
 		//space masks
 		static U64 SPACE_MASK[2];
@@ -71,6 +78,8 @@ class BitBoardGen{
 		static void initRectLookUp();
 		static void generateAdjacentFiles();
 		static void generateFrontSpan();
+		static void generateFrontAttackSpan();
+		static void generateAheadBehind();
 		static void initSquares();
 		static void initDistances();
 		static void initLines();
@@ -79,12 +88,15 @@ class BitBoardGen{
 		static void initAll();
 
 		static int popCount(U64 bb){
+			/*
 			int cnt = 0;
 			while(bb){
 				cnt++;
 				bb&= bb-1;
 			}
 			return cnt;
+			*/
+			return __builtin_popcountll(bb);
 		}	
 };
 static void emptyBitString(char b[8][8]);

@@ -1,34 +1,69 @@
 #ifndef BOARD_STATE
 #define BOARD_STATE
 
+#include "defs.h"
+
 class BoardState{
 	public:
-		static const int WK_CASTLE = 0x4000;
-		static const int WQ_CASTLE = 0x8000;
-		static const int BK_CASTLE = 0x10000;
-		static const int BQ_CASTLE = 0x20000;
-		static const int NO_FLAGS = 0x0;
-		
-		static int new_state(int epSquare, int halfMoves, int turn, int flags);
-		static int setEpSquare(int s, int ep);
-		static int epSquare(int s);
-		static int setHalfMoves(int s, int h);
-		static int halfMoves(int s);
-		static int setCurrentPlayer(int s, int t);
-		static int currentPlayer(int s);
-		static bool can_castle_ks(int s, int side);
-		static bool can_castle_qs(int s, int side);
-		static bool white_can_castle_ks(int s);
-		static bool white_can_castle_qs(int s);
-		static bool black_can_castle_ks(int s);
-		static bool black_can_castle_qs(int s);
-		static int castle_key(int s);
-		static void print(int s);
-			
+		int epSquare;
+		int halfMoves;
+		int currentPlayer;
+		//1111 -> black_sq, black_ks, white_qs, white_ks
+		int castleKey;
+		U64 zKey;
+		bool valid;
+
+		static const int CASTLE_ALL = 15;
+		static const int WK_CASTLE = 1;
+		static const int WQ_CASTLE = 2;
+		static const int W_CASTLE_BOTH = 3;
+		static const int BK_CASTLE = 4;
+		static const int BQ_CASTLE = 8;
+		static const int B_CASTLE_BOTH = 12;
+
+		bool can_castle_ks(int side);
+		bool can_castle_qs(int side);
+		bool white_can_castle_ks();
+		bool white_can_castle_qs();
+		bool black_can_castle_ks();
+		bool black_can_castle_qs();
+
+		/*
+		void set_white_castle_ks();
+		void set_white_castle_qs();
+		void set_black_castle_ks();
+		void set_black_castle_qs();
+		*/
+
+		BoardState(){
+			epSquare = 0;
+			halfMoves = 0;
+			currentPlayer = 0;
+			castleKey = 0;
+			zKey = 0;
+			valid = false;
+		}
+
+		BoardState(int eps, int hm, int cp, int ck, U64 zk){
+			epSquare = eps;
+			halfMoves = hm;
+			currentPlayer = cp;
+			ck = ck;
+			zKey = zk;
+		}
+
+		BoardState(const BoardState& s){
+			epSquare = s.epSquare;
+			halfMoves = s.halfMoves;
+			currentPlayer = s.currentPlayer;
+			castleKey = s.castleKey;
+			zKey = s.zKey;
+			valid = s.valid;
+		}
+
 	private:
 		static int CASTLE_KS[2];
 		static int CASTLE_QS[2];
-		
 };
 
 #endif

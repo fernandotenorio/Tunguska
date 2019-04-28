@@ -16,9 +16,13 @@ class Perft{
 		Board board;
 		bool ok;
 		bool verbose;
+		bool eval;		
 		static U64 TOTAL_NODES;
 
-		Perft(std::string fen, int depth, U64 nodes);
+		static bool perft_pseudo(std::string fen, int depth, U64 expected);
+		static U64 perft_pseudoTest(Board *board, int depth, int height);
+
+		Perft(std::string fen, int depth, U64 nodes, bool eval);
 		U64 perft(int depth);
 		bool run();
 		static void divide(std::string fen, int depth);

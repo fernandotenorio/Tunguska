@@ -94,6 +94,7 @@ void BitBoardGen::generateCastleMask(){
 }
 
 U64 BitBoardGen::BITBOARD_RANKS[8];
+U64 BitBoardGen::RANKS_4_5_6_7[2];
 void BitBoardGen::generateRanks(){
 	char bitString[8][8];
 	
@@ -105,9 +106,12 @@ void BitBoardGen::generateRanks(){
 		}
 		BitBoardGen::BITBOARD_RANKS[r] = bitboardFromBitString(bitString);
 	}
+	RANKS_4_5_6_7[0] = BITBOARD_RANKS[3] | BITBOARD_RANKS[4] | BITBOARD_RANKS[5] | BITBOARD_RANKS[6];
+	RANKS_4_5_6_7[1] = BITBOARD_RANKS[1] | BITBOARD_RANKS[2] | BITBOARD_RANKS[3] | BITBOARD_RANKS[4];
 }
 
 U64 BitBoardGen::BITBOARD_FILES[8];
+U64 BitBoardGen::CENTER_FILES;
 void BitBoardGen::generateFiles(){
 	char bitString[8][8];
 	
@@ -119,6 +123,7 @@ void BitBoardGen::generateFiles(){
 		}
 		BitBoardGen::BITBOARD_FILES[f] = bitboardFromBitString(bitString);
 	}
+	CENTER_FILES = BITBOARD_FILES[2] | BITBOARD_FILES[3] | BITBOARD_FILES[4] | BITBOARD_FILES[5];
 }
 
 U64 BitBoardGen::WRAP_FILES[2];
@@ -231,7 +236,7 @@ void BitBoardGen::generateKingRegion(){
 				if (up2 >= 0 && up2 < 8 && f >= 0 && f < 8)
 					bitString[up2][f] = '1';
 				
-				BitBoardGen::BITBOARD_KING_REGION[side][r * 8 + f]= bitboardFromBitString(bitString);
+				BitBoardGen::BITBOARD_KING_REGION[side][r * 8 + f] = bitboardFromBitString(bitString);
 			}
 		}
 	}
@@ -423,6 +428,47 @@ void BitBoardGen::generateFrontSpan(){
 					bitString[r][c + 1] = '1';
 			}			
 			BitBoardGen::FRONT_SPAN[side][sq] = bitboardFromBitString(bitString);
+		}
+	}
+}
+
+U64 BitBoardGen::FRONT_ATTACK_SPAN[2][64];
+void BitBoardGen::generateFrontAttackSpan(){
+	char bitString[8][8];
+	int dy[] = {1, -1};
+	
+	for (int side = 0; side < 2; side++){
+		
+		for (int sq = 0; sq < 64; sq++){
+			emptyBitString(bitString);
+
+			int rr = sq/8;
+			int c = sq % 8;
+			
+			for(int r = rr + dy[side]; r >= 0 && r < 8; r+=dy[side]){
+				//bitString[r][c] = '1'; for attack span the column is set to zero
+				if (c - 1 >= 0)
+					bitString[r][c - 1] = '1';
+				if (c + 1 < 8)
+					bitString[r][c + 1] = '1';
+			}			
+			BitBoardGen::FRONT_ATTACK_SPAN[side][sq] = bitboardFromBitString(bitString);
+		}
+	}
+}
+
+U64 BitBoardGen::SQUARES_AHEAD[2][64];
+U64 BitBoardGen::SQUARES_BEHIND[2][64];
+void BitBoardGen::generateAheadBehind(){
+
+	for (int side = 0; side < 2; side++){
+		for (int i = 0; i < 64; i++){			
+			SQUARES_AHEAD[side][i] = FRONT_SPAN[side][i] & (~FRONT_ATTACK_SPAN[side][i]);		
+		}
+	}
+	for (int side = 0; side < 2; side++){
+		for (int i = 0; i < 64; i++){			
+			SQUARES_BEHIND[side][i] = SQUARES_AHEAD[side^1][i];
 		}
 	}
 }
@@ -631,6 +677,8 @@ void BitBoardGen::initAll(){
 	BitBoardGen::initRectLookUp();
 	BitBoardGen::initSquares();
 	BitBoardGen::generateFrontSpan();
+	BitBoardGen::generateFrontAttackSpan();
+	BitBoardGen::generateAheadBehind();
 	BitBoardGen::generateAdjacentFiles();
 	BitBoardGen::initDistances();
 	BitBoardGen::generateKingAhead();

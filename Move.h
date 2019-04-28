@@ -39,7 +39,7 @@ class Move{
 		static bool isCastle(int move);
 		static int promoteTo(int move);
 		static std::string toNotation(int move);
-		static std::string toLongNotation(int move);
+		static std::string toLongNotation(int move);		
 		static void print(int move);
 };
 

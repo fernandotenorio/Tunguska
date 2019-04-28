@@ -7,25 +7,82 @@
 #include <fstream>
 #include <assert.h>
 #include "StringUtils.h"
+#include "Evaluation.h"
 
 U64 Perft::TOTAL_NODES = 0;
 
-Perft::Perft(std::string fen, int d, U64 n){
+U64 Perft::perft_pseudoTest(Board *board, int depth, int height){
+
+	if (!depth)
+		return 1;
+
+	int side = board->state.currentPlayer;
+	int ks = board->kingSQ[side];
+	bool atCheck = MoveGen::isSquareAttacked(board, ks, side^1);
+
+	MoveList moves;	
+	MoveGen::pseudoLegalMoves(board, side, moves, atCheck);
+	U64 result = 0;
+
+    for (int i = 0; i < moves.size(); i++){
+    	BoardState undo = board->makeMove(moves.get(i));
+    	U64 count = 0;
+
+    	if (!undo.valid)
+    		continue;
+    	
+    	count = perft_pseudoTest(board, depth - 1, height + 1);
+
+    	if(!height) {                
+            for(int i = 0; i < height; ++i) {
+                printf(" ");
+            }                
+           	std::cout << Move::toLongNotation(moves.get(i)) << " : " << count << std::endl;
+        }
+        result+= count;
+        board->undoMove(moves.get(i), undo);
+    }
+    return result;
+}
+
+bool Perft::perft_pseudo(std::string fen, int depth, U64 expected){
+	Board board = FenParser::parseFEN(fen);
+	U64 nodes = 0;
+
+	for(int i = 1; i <= depth; ++i) {
+        clock_t start = clock();
+
+        nodes = perft_pseudoTest(&board, i, 0);
+        clock_t end = clock();
+
+        if(!(end - start)) {
+            end = start + 1;
+        }
+        double elapsed_secs = double(end - start)/CLOCKS_PER_SEC;        
+        std::cout << "Perft " << i << ": " << nodes << " Time: " << elapsed_secs <<  " secs." << std::endl;
+    }
+    std::string status = (nodes == expected) ? " Success": " Fail";
+    std::cout <<  "Result: " << nodes << " Expected: " << expected << status << std::endl;
+    return nodes == expected;
+}
+
+Perft::Perft(std::string fen, int d, U64 n, bool ev){
 	FEN = fen;
 	depth = d;
 	nodes = n;
 	board = FenParser::parseFEN(fen);
 	verbose = true;
+	eval = ev;
 }
 
 U64 Perft::perft(int depth_){
 
-	int side = BoardState::currentPlayer(board.state);
-	int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
-	bool atCheck = MoveGen::isSquareAttacked(board, ks, side^1);
+	int side = board.state.currentPlayer;
+	int ks = board.kingSQ[side];
+	bool atCheck = MoveGen::isSquareAttacked(&board, ks, side^1);
 
 	MoveList moves;
-	MoveGen::legalMoves(board, side, moves, atCheck);
+	MoveGen::legalMoves(&board, side, moves, atCheck);
 	int n_moves = moves.size();
 
 	if (depth_ == 1)	
@@ -33,9 +90,18 @@ U64 Perft::perft(int depth_){
 
 	U64 totalNodes = 0;
 	for (int i = 0; i < moves.size(); i++){
-		int undo = board.makeMove(moves.get(i));							
+		int wmat = board.material[0];
+		int bmat = board.material[1];
+		BoardState undo = board.makeMove(moves.get(i));
+
+		if (eval){
+			int s = Evaluation::evaluate(board, side);
+		}
+
 		totalNodes += perft(depth_ - 1);			
 		board.undoMove(moves.get(i), undo);
+
+		assert(wmat == board.material[0] && bmat==board.material[1]);
 	}
 	return totalNodes;
 }
@@ -48,12 +114,12 @@ void Perft::divide(std::string fen, int depth){
   }
   
   Board board = FenParser::parseFEN(fen);
-  int side = BoardState::currentPlayer(board.state);
+  int side = board.state.currentPlayer;
   int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
-  bool atCheck = MoveGen::isSquareAttacked(board, ks, side^1);
+  bool atCheck = MoveGen::isSquareAttacked(&board, ks, side^1);
 
   MoveList moves;
-  MoveGen::legalMoves(board, side, moves, atCheck);
+  MoveGen::legalMoves(&board, side, moves, atCheck);
   int nodes = 0;
   depth-= 1;
                 
@@ -65,8 +131,8 @@ void Perft::divide(std::string fen, int depth){
   }
   else{
        for (int i = 0; i < moves.size(); i++){
-           int undo = board.makeMove(moves.get(i));
-           Perft p(board.toFEN(), depth, 0);
+           BoardState undo = board.makeMove(moves.get(i));
+           Perft p(board.toFEN(), depth, 0, false);
            p.verbose = false;
            p.run();
            board.undoMove(moves.get(i), undo);
@@ -81,17 +147,19 @@ bool Perft::run(){
 	result = perft(depth);
 	TOTAL_NODES += result;
 	ok = result == nodes;
+	std::string status = ok ? " Success": " Fail";
+
 	if (verbose)
-		std::cout <<  "result: " << result << " ok: " << ok << " nodes: " << nodes << std::endl;
+		std::cout <<  "Result: " << result << " Expected: " << nodes << status << std::endl;
 	return ok;
 }
 
 void Perft::runAll(std::string test_file){
 	std::ifstream file(test_file);
-    std::string line; 
+    std::string line;
+    clock_t begin = clock();
 	
     while (std::getline(file, line)){
-
         std::vector<std::string> tokens = splitString(line, ";");
 		std::string fen = tokens.at(0);
 		
@@ -100,13 +168,18 @@ void Perft::runAll(std::string test_file){
 			int depth = std::stoi(DN.at(0));
 			U64 nodes = std::stol(DN.at(1));
 
-			bool ok = Perft(fen, depth, nodes).run();
+			bool ok = Perft(fen, depth, nodes, false).run();
+			//bool ok = perft_pseudo(fen, depth, nodes);
+									
 			if(!ok){
 				std::cout << "Perft fail at FEN: " << fen << std::endl;
 				return;
-			}
-		}
+			}			
+		}		
     }
+    clock_t end = clock();
+    double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+    std::cout << "Total time: " << elapsed_secs << " Total nodes: " << Perft::TOTAL_NODES << std::endl;
 	printf("Perft ok.\n");
 }
 

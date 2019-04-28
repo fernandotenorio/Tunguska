@@ -12,9 +12,7 @@
 
 class HashTable;
 #include "HashTable.h"
-
 #include <string>
-
 
 class Board{
 	public:
@@ -64,16 +62,16 @@ class Board{
 		static const int H8 = 63;
 		
 		static int KS_CASTLE_ATTACK[2][2];
-		static int QS_CASTLE_ATTACK[2][2];
-		static int CASTLE_KS_SQ[2][4];
-		static int CASTLE_QS_SQ[2][4];
+		static int QS_CASTLE_ATTACK[2][2];		
 		static int CASTLE_SQS[2][2][4];
 		static const int MAX_DEPTH = 64;
 		static const int MAX_MOVES = 2048;
 		
 		U64 bitboards[14];
+		int kingSQ[2];
 		int board[64];
-		int state = 0;
+		BoardState state;
+		int material[2];
 		int fullMoves; //TODO update
 		U64 zKey;
 		//game hist ply
@@ -95,10 +93,10 @@ class Board{
 		
 		//void setPVTable(PVTable *tb);
 		void setHashTable(HashTable *tb);
-		int makeMove(int move);
-		int makeNullMove();
-		void undoMove(int move, int undo);
-		void undoNullMove(int undo);
+		BoardState makeMove(int move);
+		BoardState makeNullMove();
+		void undoMove(int move, BoardState undo);
+		void undoNullMove(BoardState undo);
 		bool isRepetition();
 		static int strToCode(char s);
 		static std::string codeToStr(int code);

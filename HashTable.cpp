@@ -5,7 +5,8 @@
 #include "MoveGen.h"
 #include <iostream>
 
-int HashTable::undoList[Board::MAX_DEPTH];
+BoardState HashTable::undoList[Board::MAX_DEPTH];
+
 
 void HashTable::initHash(int size){
 	numEntries = (size * 0x100000)/sizeof(HashEntry);
@@ -22,9 +23,14 @@ void HashTable::initHash(int size){
     numEntries_1 = numEntries - 1;
     table = new HashEntry[numEntries];
 
-    for (int i = 0; i < numEntries; i++)
-    	table[i] = HashEntry();
+    for (int i = 0; i < numEntries; i++){
+    	table[i] = HashEntry();    	
+    }
 
+    newWrite = 0;
+    overWrite = 0;
+    hit = 0;
+    cut = 0;
     std::cout << "Hash Table size: " << numEntries * sizeof(HashEntry)/0x100000 << " MB" << std::endl;
 }
 
@@ -88,10 +94,13 @@ bool HashTable::probeHashEntry(Board& board, int *move, int *score, int alpha, i
 }
 
 void HashTable::storeHashEntry(Board& board, const int move, int score, const int flags, const int depth){
+	if (depth >= Board::MAX_DEPTH)
+		return;
+
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
-	
+
 	assert(index >= 0 && index <= board.hashTable->numEntries_1);
-	assert(depth >=1 && depth <= Board::MAX_DEPTH);
+	//assert(depth >=1 && depth <= Board::MAX_DEPTH);
     assert(flags >= HFNONE && flags <= HFEXACT);
     assert(score >= -Search::INFINITE && score <= Search::INFINITE);
     assert(board.ply >=0 && board.ply < Board::MAX_DEPTH);
@@ -122,8 +131,8 @@ int HashTable::getPVLine(int depth, Board& board){
 
 		assert(count < Board::MAX_DEPTH);
 
-		if (moveExists(board, move, BoardState::currentPlayer(board.state))){
-			int undo = board.makeMove(move);
+		if (moveExists(board, move, board.state.currentPlayer)) {
+			BoardState undo = board.makeMove(move);			
 			undoList[count] = undo;
 			board.pvArray[count++] = move;				
 		} else{
@@ -139,16 +148,15 @@ int HashTable::getPVLine(int depth, Board& board){
 	return count;
 }
 
-bool HashTable::moveExists(Board& board, int move, int side){
-	//return true;
-	int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
-	bool atCheck = MoveGen::isSquareAttacked(board, ks, side^1);
+bool HashTable::moveExists(Board& board, int move, int side){	
+	int ks = board.kingSQ[side];
+	bool atCheck = MoveGen::isSquareAttacked(&board, ks, side^1);
 	MoveList moves;
-	MoveGen::pseudoLegalMoves(board, side, moves, atCheck);
-	U64 pinned = MoveGen::pinnedBB(board, side, ks);
+	MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
+	U64 pinned = MoveGen::pinnedBB(&board, side, ks);
 
 	for (int i = 0; i < moves.size(); i++){
-		if (moves.get(i) == move && MoveGen::isLegalMove(board, moves.get(i), side, atCheck, pinned)){
+		if (moves.get(i) == move && MoveGen::isLegalMove(&board, moves.get(i), side, atCheck, pinned)){
 			return true;
 		}
 	}

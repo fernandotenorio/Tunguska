@@ -19,15 +19,15 @@ U64 Zobrist::getKey(const Board& board){
 	}
 
 	//castle
-	key^= castleKeys[BoardState::castle_key(board.state)];
+	key^= castleKeys[board.state.castleKey];
 
 	//ep
-	int epSq = BoardState::epSquare(board.state);
+	int epSq = board.state.epSquare;
 	if (epSq != 0)
 		key^= epKeys[epSq % 8];
 
 	//side 
-	if (BoardState::currentPlayer(board.state) == Board::BLACK)
+	if (board.state.currentPlayer == Board::BLACK)
 		key^= sideBlackKey;
 
 	return key;

@@ -15,7 +15,7 @@ class HashEntry{
 		int depth;
 		int flags;
 
-		HashEntry():zKey(0), move(0), score(0), depth(0), flags(0){}
+		HashEntry():zKey((U64)0), move(0), score(0), depth(0), flags(0){}
 };
 
 class HashTable{
@@ -32,7 +32,7 @@ class HashTable{
 		void reset();
 
 		HashEntry *table;
-		static int undoList[];
+		static BoardState undoList[];
 		//rounded down to power of 2
 		U32 numEntries;
 		U32 numEntries_1;

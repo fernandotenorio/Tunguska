@@ -1,16 +1,37 @@
+/*
+--TODO
+- king safety tests http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=696199&t=62259
+-add weak queen penalty, ie, queen on same line as opp rook bishop
+-improve qsearch (ask on talkchess)
+-add backward pawns
+-king dist to passed pawn
+-Add capture bonus for king distance
+-Try to profile with g++
+-Test other random64 code and compare speed
+-add bad captures pruning in qsearch (see cpw)
+-Change quiescence delta pruning (observe node cnt change)
+-Try to separate good from bad captures(http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=688908&t=61616)
+-Remove double call to isSquareAttacked inside can_castle
+-make and use constant castle moves
+-add extra prunning condition legal > n_moves
+-add outpost bishop/knight bonus (protected by pawn, no enemy pawn on adjc files)
+-change pawn value and pst for end phase (material_end term)
+-optimize makemove dumb code
+*/
+
 #include "Evaluation.h"
 #include "MoveGen.h"
 #include "FenParser.h"
 #include "Zobrist.h"
-
+#include "Magic.h"
 #include <iostream>
 #include <fstream>
 
 #define PAWN_SQ {0, 0, 0, 0,  0,  0,  0,  0, 5, 10, 10,-20,-20, 10, 10,  5, 5, -5,-10,  0,  0,-10, -5,  5, 0,  0,  0, 20, 20,  0,  0,  0, 5,  5, 10, 25, 25, 10,  5,  5, 10, 10, 20, 30, 30, 20, 10, 10, 50, 50, 50, 50, 50, 50, 50, 50, 0,  0,  0,  0,  0,  0,  0,  0}						
 #define KNIGHT_SQ {-50,-40,-30,-30,-30,-30,-40,-50,-40, -20,  0,  5,  5,  0, -20, -40,-30,  5, 10, 15, 15, 10,  5, -30, -30,  0, 15, 20, 20, 15,  0,-30,-30,  5, 15, 20, 20, 15,  5,-30,-30,  0, 10, 15, 15, 10,  0, -30, -40, -20,  0,  0,  0,  0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50}							
-#define BISHOP_SQ {-20,-10,-10,-10,-10,-10,-10,-20,-10,  5,  0,  0,  0,  0,  5,-10,-10, 10, 10, 10, 10, 10, 10,-10,-10,  0, 10, 10, 10, 10,  0,-10,-10,  5,  5, 10, 10,  5,  5,-10,-10,  0,  5, 10, 10,  5,  0,-10,-10,  0,  0,  0,  0,  0,  0,-10,-20,-10,-10,-10,-10,-10,-10,-20}							  
+#define BISHOP_SQ {-20,-10,-10,-10,-10,-15,-10,-20,-10,  5,  0,  0,  0,  0,  5,-10,-10, 10, 10, 10, 10, 10, 10,-10,-10,  0, 10, 10, 10, 10,  0,-10,-10,  5,  5, 10, 10,  5,  5,-10,-10,  0,  5, 10, 10,  5,  0,-10,-10,  0,  0,  0,  0,  0,  0,-10,-20,-10,-10,-10,-10,-10,-10,-20}							  
 #define ROOK_SQ {-5, 0, 5, 10, 10, 5, 0, -5, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0, 0, 0,  0,  5,  10,  10,  5,  0,  0, 20, 20, 20, 20, 20, 20, 20, 20, 0,  0,  0,  0,  0,  0,  0,  0}
-#define QUEEN_SQ {-20,-10,-10, -5, -5,-10,-10,-20,-10,  0,  5,  0,  0,  0,  0,-10,-10,  5,  5,  5,  5,  5,  0,-10,0,   0,  5,  5,  5,  5,  0, -5,-5,   0,  5,  5,  5,  5,  0, -5,-10,  0,  5,  5,  5,  5,  0,-10,-10,  0,  0,  0,  0,  0,  0,-10,-20,-10,-10, -5, -5,-10,-10,-20}							
+#define QUEEN_SQ {-20,-10,-10, -5, -5,-10,-10,-20,-10,  0,  5,  0,  0,  0,  0,-10,-10,  5,  5,  5,  5,  5,  0,-10,-5,   0,  5,  5,  5,  5,  0, -5,-5,   0,  5,  5,  5,  5,  0, -5,-10,  0,  5,  5,  5,  5,  0,-10,-10,  0,  0,  0,  0,  0,  0,-10,-20,-10,-10, -5, -5,-10,-10,-20}
 #define KING_SQ {20, 30, 10,  0,  0, 10, 30, 20,20, 20,  0,  0,  0,  0, 20, 20,-10,-20,-20,-20,-20,-20,-20,-10,-20,-30,-30,-40,-40,-30,-30,-20,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30}							 
 #define KING_END_SQ {-50, -40, 0, 0, 0,	0, -40,	-50, -20, 0, 10, 15, 15, 10, 0,	-20, 0,	10,	20,	20,	20,	20,	10,	0, 0, 10, 30, 40, 40, 30, 10, 0, 0,	10,	20,	40,	40,	20,	10,	0, 0, 10, 20, 20, 20, 20, 10, 0, -10, 0, 10, 10, 10, 10, 0,	-10, -50, -10,	0,	0,	0,	0, -10, -50}
 
@@ -35,6 +56,15 @@ static const int KNB_K_MATE[2][64]= {
 		-5,-5,-10,-10,-20,-30,-30,-50}
 };
 
+static const int STORM_MAP[64] = {0,  0,  0,  0,  0,  0,  0,  0,
+								  0,  0,  0,  0,  0,  0,  0,  0,
+								  0,  0,  0,  0,  0,  0,  0,  0,
+								 10, 10, 20,  0,  0, 20, 10, 10,
+								 15, 20, 50, 15, 15, 50, 20, 15,
+								 30, 50, 60, 50, 50, 60, 50, 30,
+								 0,  0,  0,  0,  0,  0,  0,  0,
+								 0,  0,  0,  0,  0,  0,  0,  0};
+
 int Evaluation::PIECE_VALUES[14] = {0, 0, PAWN_VAL, -PAWN_VAL, KNIGHT_VAL, -KNIGHT_VAL, BISHOP_VAL,
 					-BISHOP_VAL, ROOK_VAL, -ROOK_VAL, QUEEN_VAL, -QUEEN_VAL, KING_VAL, -KING_VAL};
 					
@@ -54,12 +84,16 @@ int Evaluation::PIECE_SQUARES_END[14][64] = {{}, {},
 										 	QUEEN_SQ, QUEEN_SQ,
 										  	KING_END_SQ, KING_END_SQ};	
 //Bishops
-static const int BISHOP_PAIR_MG = 25;
-static const int BISHOP_PAIR_EG = 50;
-static const int BISHOP_PAWN_PENALTY_MG = -8;
-static const int BISHOP_PAWN_PENALTY_EG = -12;
+static const int BISHOP_PAIR_MG = 50;
+static const int BISHOP_PAIR_EG = 68;
+static const int BISHOP_PAWN_PENALTY_MG = -3;
+static const int BISHOP_PAWN_PENALTY_EG = -7;
 
 //Open and semiopen files
+static const int D_ROOK_7_MG = 40;
+static const int D_ROOK_7_EG = 80;
+static const int D_ROOK_7_Q = 20;
+
 static const int R_OPEN_MG = 14;
 static const int R_SOPEN_MG = 7;
 static const int Q_OPEN_MG = 6;
@@ -78,6 +112,16 @@ static const int PASSED_PAWN_BONUS_MG[2][8] = {{0, 2, 5, 10, 20, 40, 70, 120}, {
 static const int PASSED_PAWN_BONUS_EG[2][8] = {{0, 5, 10, 20, 40, 90, 150, 200}, {200, 150, 90, 40, 20, 10, 5, 0}};
 static const int DOUBLED_ISOLATED_PAWN_MG = -10;
 static const int DOUBLED_ISOLATED_PAWN_EG = -20;
+
+static const int BACKWARD_PAWN_PENALTY_MG[8] = {-20, -25, -30, -35, -35, -30, -25, -20};
+static const int BACKWARD_PAWN_PENALTY_EG[8] = {-25, -30, -35, -40, -40, -35, -30, -25};
+
+//Outposts (indexed by file)
+static const int KNIGHT_OUTPOST_BONUS_MG[8] = {2, 4, 8, 16, 16, 8, 4, 2};
+static const int KNIGHT_OUTPOST_BONUS_EG[8] = {3, 6, 10, 20, 20, 10, 6, 3};
+
+static const int BISHOP_OUTPOST_BONUS_MG[8] = {2, 4, 8, 16, 16, 8, 4, 2};
+static const int BISHOP_OUTPOST_BONUS_EG[8] = {3, 6, 10, 20, 20, 10, 6, 3};
 
 static const int PAWN_CONNECTED_BONUS_MG[2][64] = {
     { 0, 0, 0, 0, 0, 0, 0, 0,
@@ -120,7 +164,7 @@ static const int PAWN_CONNECTED_BONUS_EG[2][64] = {
 };
 
 int Evaluation::MIRROR64[64];
-static AttackInfo attackInfo;
+int Evaluation::DISTANCE_BONUS[64][64];
 
 void Evaluation::initAll(){
 	for (int i = 0; i < 64; i++){
@@ -129,13 +173,27 @@ void Evaluation::initAll(){
 		int sqBlack = (7 - r)* 8 + c;
 		MIRROR64[i] = sqBlack;
 	}
+
+	for(int i = 0; i < 64; ++i) {
+        for(int j = 0; j < 64; ++j) {
+        	int fi = i & 7;
+        	int fj = j & 7;
+        	int ri = i >> 3;
+        	int rj = j >> 3;
+            DISTANCE_BONUS[i][j] = 14 - (abs(ri - rj) + abs(fi - fj));
+        }   
+    }
 }	
 
 void Evaluation::materialBalance(const Board& board, int& mg, int& eg){
+	/*
 	for (int i = 0; i < 64; i++){
 		mg+= PIECE_VALUES[board.board[i]];
 		eg+= PIECE_VALUES[board.board[i]];
 	}
+	*/
+	mg+= board.material[0] - board.material[1];
+	eg+= board.material[0] - board.material[1];
 }
 
 void Evaluation::pieceSquaresBalance(const Board& board, int& mg, int& eg){
@@ -158,6 +216,68 @@ void Evaluation::pieceSquaresBalance(const Board& board, int& mg, int& eg){
 	}
 }
 
+// backward pawns that can be pushed will not be considered
+// example, fen k7/5p2/6p1/p1p3P1/P1P5/7P/1P6/K7 w - -
+void backward_pawns_chained(const Board& board, int& mg, int& eg){
+
+	int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
+	int diffs[2][2] = {{7, -9}, {9, -7}};
+	U64 pAttacks[2] = {0, 0};
+
+	for (int side = 0; side < 2; side++){
+		U64 pawnBB = board.bitboards[Board::PAWN | side];
+		for (int i = 0; i < 2; i++){
+			int *dir = dirs[i];
+			int *diff = diffs[i];
+			U64 wFile = BitBoardGen::WRAP_FILES[i];
+			U64 attacks = BitBoardGen::circular_lsh(pawnBB, dir[side]) & ~wFile;
+			pAttacks[side]|= attacks;
+		}
+	}
+
+	//white
+	U64 wp = board.bitboards[Board::WHITE_PAWN];	
+	U64 stops = wp << 8;
+	U64 spans = 0;
+
+	while(wp){
+		int sq = numberOfTrailingZeros(wp);
+		spans|= BitBoardGen::FRONT_ATTACK_SPAN[Board::WHITE][sq];	
+		wp&= wp - 1;
+	}
+
+	U64 wBack = (stops & pAttacks[Board::BLACK] & ~spans) >> 8;
+
+	//Black
+	U64 bp = board.bitboards[Board::BLACK_PAWN];	
+	stops = bp >> 8;
+	spans = 0;
+
+	while(bp){
+		int sq = numberOfTrailingZeros(bp);
+		spans|= BitBoardGen::FRONT_ATTACK_SPAN[Board::BLACK][sq];
+		bp&= bp - 1;
+	}
+	U64 bBack = (stops & pAttacks[Board::WHITE] & ~spans) << 8;
+	
+	// Score
+	while(wBack){
+		int sq = numberOfTrailingZeros(wBack);
+		int file = sq & 7;
+		mg+= BACKWARD_PAWN_PENALTY_MG[file];
+		eg+= BACKWARD_PAWN_PENALTY_EG[file];
+		wBack&= wBack - 1;
+	}
+
+	while(bBack){
+		int sq = numberOfTrailingZeros(bBack);
+		int file = sq & 7;
+		mg+= -1 * BACKWARD_PAWN_PENALTY_MG[file];
+		eg+= -1 * BACKWARD_PAWN_PENALTY_EG[file];
+		bBack&= bBack - 1;
+	}
+}
+
 void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
 	
 	int s = 1;
@@ -166,7 +286,7 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
 		int pawnSide = Board::PAWN | side;
 		U64 pawnBB = board.bitboards[pawnSide];
 		U64 pawns = board.bitboards[pawnSide];
-		U64 oppPawns = board.bitboards[side^1 | Board::PAWN];
+		U64 oppPawns = board.bitboards[(side^1) | Board::PAWN];
 	
 		while (pawns){
 			int sq = numberOfTrailingZeros(pawns);
@@ -205,6 +325,9 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
 		}
 		s = -1;
 	}
+
+	//backward pawns
+	//backward_pawns_chained(board, mg, eg);
 }
 
 bool Evaluation::materialDraw(const Board& board){
@@ -274,7 +397,7 @@ bool Evaluation::materialDraw(const Board& board){
 void Evaluation::pieceOpenFile(const Board& board, int& mg, int& eg){
 	
 	const int pieceTypes[2] = {Board::ROOK, Board::QUEEN};
-	U64 pawnBoth = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+	U64 pawnBoth = board.bitboards[Board::WHITE_PAWN] | board.bitboards[Board::BLACK_PAWN];
 	int s = 1;
 
 	for (int side = 0; side < 2; side++){
@@ -304,39 +427,37 @@ void Evaluation::pieceOpenFile(const Board& board, int& mg, int& eg){
 	}
 }
 
-//Save attack info here!
 void Evaluation::kingAttack(const Board& board, int& mg){
 	mg+= kingAttackedSide(board, Board::BLACK) - kingAttackedSide(board, Board::WHITE);
 }
 
-// Return opp attack eval on side king
+// Return opp attack eval on king from side
 int Evaluation::kingAttackedSide(const Board& board, int side){
 	int opp = side^1;
 	U64 king = board.bitboards[Board::KING | side];
 	int kingSq = numberOfTrailingZeros(king);
 	U64 region = BitBoardGen::BITBOARD_KING_REGION[side][kingSq];
-	U64 occup = board.bitboards[side] | board.bitboards[opp];
-	U64 enemyOrEmpty = ~board.bitboards[opp]; //include opp king square
+	U64 attackerPawns = board.bitboards[Board::PAWN | opp];
+	//U64 occup = board.bitboards[side] | board.bitboards[opp];
+	U64 occup = board.bitboards[side] | attackerPawns;
 	
 	int numAttackers = 0;
 	int attackVal = 0;
 	//Attack weights
-	const int ROOK_AW = 40;
-	const int QUEEN_AW = 80;
-	const int BISHOP_AW = 20;
-	const int KNIGHT_AW = 20;
+	const int ROOK_AW = 137;
+	const int QUEEN_AW = 115;
+	const int BISHOP_AW = 11;
+	const int KNIGHT_AW = 95;
 	//Weight of attack by numAttackers, 0 or 1 attacker => 0 weight
-	const int ATTACK_W[] = {0, 0, 50, 75, 88, 94, 97, 99};
+	const int ATTACK_W[] = {0, 0, 30, 75, 88, 94, 97, 99};
 
 	//rooks
 	U64 rooks = board.bitboards[Board::ROOK | opp];
-	U64 rookTargs = 0;
 	int nrooks = 0;
 	
 	while (rooks){	
 		int from = numberOfTrailingZeros(rooks);
-		U64 tmpTarg = MoveGen::rookAttacks(board, occup, from, 0);
-		rookTargs|= tmpTarg;
+		U64 tmpTarg = Magic::rookAttacksFrom(occup, from);
 
 		if (tmpTarg & region)
 			nrooks++;
@@ -345,18 +466,13 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	numAttackers+= nrooks;
 	attackVal+= nrooks * ROOK_AW;
 	
-	//attack info
-	attackInfo.rooks[side] = rookTargs;
-	
 	//queens
 	U64 queens = board.bitboards[Board::QUEEN | opp];
-	U64 queenTargs = 0;
 	int nqueens = 0;
 	
 	while (queens){	
 		int from = numberOfTrailingZeros(queens);
-		U64 tmpTarg = MoveGen::rookAttacks(board, occup, from, 0) | MoveGen::bishopAttacks(board, occup, from, 0); 
-		queenTargs|= tmpTarg;
+		U64 tmpTarg = Magic::rookAttacksFrom(occup, from) | Magic::bishopAttacksFrom(occup, from); 
 
 		if (tmpTarg & region)	
 			nqueens++;
@@ -366,18 +482,13 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	numAttackers+= nqueens;
 	attackVal+= nqueens * QUEEN_AW;
 	
-	//attack info
-	attackInfo.queens[side] = queenTargs;
-	
 	//bishops
 	U64 bishops = board.bitboards[Board::BISHOP | opp];
-	U64 bishopTargs = 0;
 	int nbishops = 0;
 	
 	while (bishops){
 		int from = numberOfTrailingZeros(bishops);
-		U64 tmpTarg = MoveGen::bishopAttacks(board, occup, from, 0);
-		bishopTargs|=  tmpTarg;
+		U64 tmpTarg = Magic::bishopAttacksFrom(occup, from);
 
 		if (tmpTarg & region)
 			nbishops++;
@@ -387,18 +498,13 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	numAttackers+= nbishops;
 	attackVal+= nbishops * BISHOP_AW;
 	
-	//attack info
-	attackInfo.bishops[side] = bishopTargs;
-	
 	//knights
-	long knights = board.bitboards[Board::KNIGHT | opp];
-	long knightTargs = 0;
+	U64 knights = board.bitboards[Board::KNIGHT | opp];
 	int nknights = 0;
 	
 	while (knights){
 		int from = numberOfTrailingZeros(knights);
-		long tmpTarg = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from] & enemyOrEmpty;
-		knightTargs|= tmpTarg;
+		U64 tmpTarg = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
 
 		if (tmpTarg & region)
 			nknights++;
@@ -407,22 +513,36 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	
 	numAttackers+= nknights;
 	attackVal+= nknights * KNIGHT_AW;
+
+	//Pawn storm
+	U64 kingHalf = (kingSq % 8 < 4) ? BitBoardGen::QUEENSIDE_MASK : BitBoardGen::KINGSIDE_MASK;
 	
-	//attack info
-	attackInfo.knights[side] = knightTargs;
-	
+	attackerPawns&= kingHalf;
+	int stormBonus = 0;
+	int nStorm = BitBoardGen::popCount(attackerPawns);
+
+	if (nStorm > 1){
+		while(attackerPawns){
+			int from = numberOfTrailingZeros(attackerPawns);
+			stormBonus+= (opp == Board::WHITE) ? STORM_MAP[from] : STORM_MAP[MIRROR64[from]];
+			attackerPawns&= attackerPawns - 1;
+		}
+	}
+
+	// two or more pawns
+	attackVal+= stormBonus;
 	numAttackers = numAttackers > 7 ? 7 : numAttackers;
 	attackVal*= ATTACK_W[numAttackers];
 	
-	return attackVal/100;
+	return attackVal/150;
 }													
 
 static const int king_shelter_bonus1 = 8;
 static const int king_shelter_bonus2 = 4;
 //one sq ahead region
-static const int king_shelter_attacked_penalty1[] = {0, -8, -16, -48};
+static const int king_shelter_attacked_penalty1[] = {0, 0, -16, -48};
 //two squares ahead region
-static const int king_shelter_attacked_penalty2[] = {0, -4, -8, -24};
+static const int king_shelter_attacked_penalty2[] = {0, 0, -8, -24};
 //opp connected pawns attacking shelter
 static const int king_connected_attack_penalty = -5;
 
@@ -433,7 +553,7 @@ void Evaluation::kingShelter(const Board& board, int& mg){
 	for (int side = 0; side < 2; side++){
 		
 		int opp = side^1;
-		int ks = numberOfTrailingZeros(board.bitboards[Board::KING | side]);
+		int ks = board.kingSQ[side];
 		U64 front1 = BitBoardGen::BITBOARD_KING_AHEAD[side][ks][0];
 		U64 front2 = BitBoardGen::BITBOARD_KING_AHEAD[side][ks][1];
 		U64 myPawns = board.bitboards[Board::PAWN | side];
@@ -463,24 +583,48 @@ void Evaluation::kingShelter(const Board& board, int& mg){
 			}
 			oppPawnsAttacking&= oppPawnsAttacking - 1;
 		}
+		
 		s = -1;
 	}
 }
 
-Board Evaluation::mirrorBoard(const Board& board){
+static const int tropism_enemy[2][4] = {
+	{Board::BLACK_QUEEN, Board::BLACK_ROOK, Board::BLACK_KNIGHT, Board::BLACK_BISHOP},
+	{Board::WHITE_QUEEN, Board::WHITE_ROOK, Board::WHITE_KNIGHT, Board::WHITE_BISHOP}
+};
+
+void Evaluation::kingTropism(const Board& board, int& mg){
+	int s = 1;
+	for (int side = 0; side < 2; side++){
+		U64 enemy = board.bitboards[side^1];
+		int kingSQ = board.kingSQ[side];
+
+		while(enemy){
+			int sq = numberOfTrailingZeros(enemy);
+			mg-= s * 4 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][0]);
+        	mg-= s * 3 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][1]);
+        	mg-= s * 2 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][2]);
+        	mg-= s * 2 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][3]);
+			enemy&= enemy - 1;
+		}
+		s = -1;
+	}
+}
+
+Board Evaluation::mirrorBoard(Board& board){
 	Board mBoard;
 	int tmpCastle = 0;
 	int tmpEP = 0;
 
 	//Castle
-	if (BoardState::white_can_castle_ks(board.state)) tmpCastle |= BoardState::BK_CASTLE;
-	if (BoardState::white_can_castle_qs(board.state)) tmpCastle |= BoardState::BQ_CASTLE;
-	if (BoardState::black_can_castle_ks(board.state)) tmpCastle |= BoardState::WK_CASTLE;
-	if (BoardState::black_can_castle_qs(board.state)) tmpCastle |= BoardState::WQ_CASTLE;
+	if (board.state.white_can_castle_ks()) tmpCastle |= BoardState::BK_CASTLE;
+	if (board.state.white_can_castle_qs()) tmpCastle |= BoardState::BQ_CASTLE;
+	if (board.state.black_can_castle_ks()) tmpCastle |= BoardState::WK_CASTLE;
+	if (board.state.black_can_castle_qs()) tmpCastle |= BoardState::WQ_CASTLE;
 
 	//Ep square
-	if (BoardState::epSquare(board.state) != 0)
-		tmpEP = Evaluation::MIRROR64[BoardState::epSquare(board.state)];
+	if (board.state.epSquare != 0)
+		tmpEP = Evaluation::MIRROR64[board.state.epSquare];
 
 	int mPieces[] = {0, 0, Board::BLACK_PAWN, Board::WHITE_PAWN, Board::BLACK_KNIGHT, Board::WHITE_KNIGHT, 
 		Board::BLACK_BISHOP, Board::WHITE_BISHOP, Board::BLACK_ROOK, Board::WHITE_ROOK, 
@@ -498,10 +642,17 @@ Board Evaluation::mirrorBoard(const Board& board){
 		mBoard.bitboards[mBoard.board[s] & 1] |= BitBoardGen::ONE << s;
 	}
 
-	int side = BoardState::currentPlayer(board.state);
-	mBoard.histPly = board.histPly;
-	mBoard.state = BoardState::new_state(tmpEP, BoardState::halfMoves(board.state), side ^ 1, tmpCastle);
-	mBoard.zKey = Zobrist::getKey(mBoard);
+	//material
+	mBoard.material[0] = board.material[1];
+	mBoard.material[1] = board.material[0];
+
+	//king square
+	mBoard.kingSQ[0] = numberOfTrailingZeros(mBoard.bitboards[Board::WHITE_KING]);
+	mBoard.kingSQ[1] = numberOfTrailingZeros(mBoard.bitboards[Board::BLACK_KING]);
+
+	int side = board.state.currentPlayer;
+	mBoard.histPly = board.histPly;	
+	mBoard.state = BoardState(tmpEP, board.state.halfMoves, side^1, tmpCastle, Zobrist::getKey(mBoard));
 	mBoard.ply = 0;
 	mBoard.hashTable = NULL;
 
@@ -516,14 +667,13 @@ int Evaluation::materialValueSide(const Board& board, int side){
 	int mat = 0;
 
 	for (int i = 0; i < 64; i++){
-		if (board.board[i] == Board::EMPTY)
+		if (! board.board[i])
 			continue;
 		if ((board.board[i] & 1) == side)
-			mat += PIECE_VALUES[board.board[i]];
+			mat+= PIECE_VALUES[board.board[i]];
 	}
 	return abs(mat) - KING_VAL;
 }
-
 
 //Phase
 static const int pawn_phase = 0;
@@ -554,14 +704,18 @@ void Evaluation::testEval(std::string test_file){
 	printf("Running eval test\n");
 
     while (std::getline(file, line)){
-    	Board board = FenParser::parseFEN(line);
+    	Board board = FenParser::parseFEN(line);    	    	
     	Board mBoard = mirrorBoard(board);
-    	bool eq = evaluate(board, BoardState::currentPlayer(board.state)) == evaluate(mBoard, BoardState::currentPlayer(mBoard.state));
-    	n++;
-    	if (!eq){
+    	int ev1 = evaluate(board, board.state.currentPlayer);
+    	int ev2 = evaluate(mBoard, mBoard.state.currentPlayer);
+
+    	//printf("Eval[%d] = %d\n", n, ev1);
+
+    	if (ev1 != ev2){
     		std::cout << "Eval test fail at FEN: " << line << std::endl;
     		return;
     	}
+    	n++;
     }
     printf("Evaluation ok: tested %d positions.\n", n);
 }
@@ -576,19 +730,29 @@ void Evaluation::evalBishops(const Board& board, int& mg, int& eg){
 	std::pair<int, int> b_ev = bb_cnt > 1 ? std::make_pair(BISHOP_PAIR_MG, BISHOP_PAIR_EG) : std::make_pair(0, 0);
 	mg+= w_ev.first - b_ev.first;
 	eg+= w_ev.second - b_ev.second;
-	
+
 	/*
 	//Pawns of same color penalty
+	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+	
 	int s = 1;
 	for (int side = 0; side < 2; side++){
 		U64 bsh = board.bitboards[Board::BISHOP | side];
+		U64 blockedPawns;
+		U64 pawnsSide = board.bitboards[Board::PAWN | side];
+
+		if (side == Board::WHITE)
+			blockedPawns = board.bitboards[Board::WHITE_PAWN] & (occup >> 8);
+		else
+			blockedPawns = board.bitboards[Board::BLACK_PAWN] & (occup << 8);
 	
 		while(bsh){
 			int color =  BitBoardGen::COLOR_OF_SQ[numberOfTrailingZeros(bsh)];
-			U64 pawns = board.bitboards[Board::PAWN | side] & BitBoardGen::LIGHT_DARK_SQS[color];
-			int cnt =  BitBoardGen::popCount(pawns);
-			mg+= s * BISHOP_PAWN_PENALTY_MG * cnt;
-			eg+= s * BISHOP_PAWN_PENALTY_EG * cnt;
+			U64 pawnsSameColor = pawnsSide & BitBoardGen::LIGHT_DARK_SQS[color] & blockedPawns;
+			int cntPenalty = BitBoardGen::popCount(pawnsSameColor);// * (1 + BitBoardGen::popCount(blockedPawns & BitBoardGen::CENTER_FILES));
+
+			mg+= s * BISHOP_PAWN_PENALTY_MG * cntPenalty;
+			eg+= s * BISHOP_PAWN_PENALTY_EG * cntPenalty;
 			bsh&= bsh - 1;
 		}
 		s = -1;
@@ -597,10 +761,6 @@ void Evaluation::evalBishops(const Board& board, int& mg, int& eg){
 }
 
 //Double rooks on 7th bonus (extra bonus if side has queen)
-static const int D_ROOK_7_MG = 40;
-static const int D_ROOK_7_EG = 80;
-static const int D_ROOK_7_Q = 20;
-
 void Evaluation::evalRooks(const Board& board, int& mg, int& eg){
 	int s = 1;
 	const U64 seventh_rank[2] = {BitBoardGen::BITBOARD_RANKS[6], BitBoardGen::BITBOARD_RANKS[1]};
@@ -634,50 +794,94 @@ static int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
 static int diffs[2][2] = {{7, -9}, {9, -7}};
 void Evaluation::mobility(const Board& board, int& mg, int& eg){
 	
+	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
 	int s = 1;
+	int scale = 3;
+	int n = 0;
+
 	for (int side = 0; side < 2; side++){
 		
 		int opp = side^1;
 		U64 oppPawnBB = board.bitboards[Board::PAWN | opp];
-		U64 oppPawnAttacks = 0;
+		U64 oppPawnAttacks = 0;		
 		
-		if (oppPawnBB){
-			for (int i = 0; i < 2; i++){
-				int *dir = dirs[i];
-				int *diff = diffs[i];
-				U64 wFile = BitBoardGen::WRAP_FILES[i];
-				oppPawnAttacks|= BitBoardGen::circular_lsh(oppPawnBB, dir[opp]) & ~wFile;
-			}
+		// if (oppPawnBB){
+		// 	for (int i = 0; i < 2; i++){
+		// 		int *dir = dirs[i];
+		// 		int *diff = diffs[i];
+		// 		U64 wFile = BitBoardGen::WRAP_FILES[i];
+		// 		oppPawnAttacks|= BitBoardGen::circular_lsh(oppPawnBB, dir[opp]) & ~wFile;
+		// 	}
+		// }
+
+		if (opp == Board::WHITE){
+			oppPawnAttacks = ((oppPawnBB << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((oppPawnBB << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
+		} else{
+			oppPawnAttacks = ((oppPawnBB >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((oppPawnBB >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);
 		}
 		
-		U64 king = board.bitboards[Board::KING | side];
+		//U64 king = board.bitboards[Board::KING | side];
+		
 		U64 blockedPawns = 0;
 		if (side == Board::WHITE)
-			blockedPawns = ((board.bitboards[Board::WHITE_PAWN] << 8) & board.bitboards[Board::BLACK]) >> 8;
+			blockedPawns = board.bitboards[Board::WHITE_PAWN] & (board.bitboards[Board::BLACK] >> 8);
 		else
-			blockedPawns = ((board.bitboards[Board::BLACK_PAWN] >> 8) & board.bitboards[Board::WHITE]) << 8;
+			blockedPawns = board.bitboards[Board::BLACK_PAWN] & (board.bitboards[Board::WHITE] << 8);		
 		
-		U64 mobilityArea = ~(oppPawnAttacks | king | blockedPawns);
+		//U64 mobilityArea = ~(oppPawnAttacks | king | blockedPawns);
+		U64 mobilityArea = ~(board.bitboards[side] | board.bitboards[Board::KING | opp] | oppPawnAttacks | blockedPawns);
+		//U64 mobilityArea = ~(oppPawnAttacks | king);
+		
 		
 		//knights
-		int n = BitBoardGen::popCount(attackInfo.knights[side] & mobilityArea);
-		mg+= s * MOB_N[0][n];
-		eg+= s * MOB_N[1][n];
-		
-		//bishops
-		n = BitBoardGen::popCount(attackInfo.bishops[side] & mobilityArea);
-		mg+= s * MOB_B[0][n];
-		eg+= s * MOB_B[1][n];
+		U64 kn = board.bitboards[Board::KNIGHT | side];
+		U64 kn_mob = 0;
+		while(kn){
+			int from = numberOfTrailingZeros(kn);
+			kn_mob|= BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
+			kn&= kn - 1;
+		}
 
-		//rooks
-		n = BitBoardGen::popCount(attackInfo.rooks[side] & mobilityArea);
-		mg+= s * MOB_R[0][n];
-		eg+= s * MOB_R[1][n];
+		n = BitBoardGen::popCount(kn_mob & mobilityArea);
+		mg+= s * MOB_N[0][n]/scale;
+		eg+= s * MOB_N[1][n]/scale;
+
+		//bishops
+		U64 bishop = board.bitboards[Board::BISHOP | side];
+		U64 bishop_mob = 0;
+		while(bishop){
+			int from = numberOfTrailingZeros(bishop);
+			bishop_mob|= Magic::bishopAttacksFrom(occup, from);
+			bishop&= bishop - 1;
+		}
+		n = BitBoardGen::popCount(bishop_mob & mobilityArea);
+		mg+= s * MOB_B[0][n]/scale;
+		eg+= s * MOB_B[1][n]/scale;
+
 		
-		//queens
-		n = BitBoardGen::popCount(attackInfo.queens[side] & mobilityArea);
-		mg+= s * MOB_Q[0][n];
-		eg+= s * MOB_Q[1][n];
+		//rooks
+		U64 rook = board.bitboards[Board::ROOK | side];
+		U64 rook_mob = 0;
+		while(rook){
+			int from = numberOfTrailingZeros(rook);
+			rook_mob|= Magic::rookAttacksFrom(occup, from);
+			rook&= rook - 1;
+		}
+		n = BitBoardGen::popCount(rook_mob & mobilityArea);
+		mg+= s * MOB_R[0][n]/scale;
+		eg+= s * MOB_R[1][n]/scale;
+						
+		//queens		
+		U64 queen = board.bitboards[Board::QUEEN | side];
+		U64 queen_mob = 0;
+		while(queen){
+			int from = numberOfTrailingZeros(queen);
+			queen_mob|= Magic::queenAttacksFrom(occup, from);
+			queen&= queen - 1;
+		}
+		n = BitBoardGen::popCount(queen_mob & mobilityArea);
+		mg+= s * MOB_Q[0][n]/scale;
+		eg+= s * MOB_Q[1][n]/scale;
 
 		s = -1;
 	}
@@ -731,6 +935,57 @@ int Evaluation::evalKBN_K(const Board& board, int side){
 	return side == Board::WHITE ? eval : -eval;
 }
 
+void Evaluation::outposts(const Board& board, int&mg, int&eg){
+	int s = 1;
+	const int min_rank[2] = {3, 1};
+	const int max_rank[2] = {6, 4};
+
+	for (int side = 0; side < 2; side++){
+
+		int opp = side^1;
+
+		// Knights
+		U64 kn = board.bitboards[Board::KNIGHT | side];
+		U64 myPawns = board.bitboards[Board::PAWN | side];
+		//test remove blocked pawns from set
+		U64 enemyPawns = board.bitboards[Board::PAWN | opp];
+
+		while (kn){
+			int sq = numberOfTrailingZeros(kn);
+			int file = sq & 7;
+			int rank = sq >> 3;
+
+			if (rank >= min_rank[side] && rank <= max_rank[side]){
+				if ((BitBoardGen::BITBOARD_PAWN_ATTACKS[opp][sq] & myPawns) && !(enemyPawns & BitBoardGen::FRONT_ATTACK_SPAN[side][sq])){
+					mg+= s * KNIGHT_OUTPOST_BONUS_MG[file];
+					eg+= s * KNIGHT_OUTPOST_BONUS_EG[file];
+				}
+			}			
+			kn&= kn - 1;
+		}
+
+		// Bishops
+		U64 bishops = board.bitboards[Board::BISHOP | side];
+
+		while (bishops){
+			int sq = numberOfTrailingZeros(bishops);
+			int file = sq & 7;
+			int rank = sq >> 3;
+
+			if (rank >= min_rank[side] && rank <= max_rank[side]){
+				if ((BitBoardGen::BITBOARD_PAWN_ATTACKS[opp][sq] & myPawns) && !(enemyPawns & BitBoardGen::FRONT_ATTACK_SPAN[side][sq])){
+					mg+= s * BISHOP_OUTPOST_BONUS_MG[file];
+					eg+= s * BISHOP_OUTPOST_BONUS_EG[file];
+				}
+			}
+			
+			bishops&= bishops - 1;
+		}
+		s = -1;
+	}
+}
+
+
 //maybe add same line as opp king/queen bonus? Same idea for rook
 int Evaluation::evaluate(const Board& board, int side){
 
@@ -740,8 +995,9 @@ int Evaluation::evaluate(const Board& board, int side){
 	*/
 	if (materialDraw(board))
 		return 0;
-	else if (get_ending(board) == KNB_K)
+	/*else if (get_ending(board) == KNB_K)
 		return evalKBN_K(board, side);
+	*/
 	
 	int mg = 0;
 	int eg = 0;
@@ -751,10 +1007,12 @@ int Evaluation::evaluate(const Board& board, int side){
 	evalPawns(board, mg, eg);
 	pieceOpenFile(board, mg, eg);
 	kingAttack(board, mg);
+	//kingTropism(board, mg);
 	kingShelter(board, mg);
 	evalBishops(board, mg, eg);
-	evalRooks(board, mg, eg);	//CHANGE: 2 rooks or rook + queen
-	// mobility(board, mg, eg);
+	evalRooks(board, mg, eg);
+	outposts(board, mg, eg);
+	//mobility(board, mg, eg);
 	
 	int phase = get_phase(board);
 	int eval = ((mg * (256 - phase)) + (eg * phase))/256;
@@ -762,14 +1020,16 @@ int Evaluation::evaluate(const Board& board, int side){
 	return side == Board::WHITE ? eval : -eval;
 }
 
-/*
-int main(){
-	BitBoardGen::initAll();
-	Zobrist::init_keys();
-	Evaluation::initAll();
-	Board board = FenParser::parseFEN("2kr1b2/1p3pr1/2p5/1p4n1/3N1Q1p/8/2P2P1n/2KR1B2 w - -");
-	board.print();
-	
-	return 0;
-}
-*/
+
+// int main(){
+// 	BitBoardGen::initAll();
+// 	Magic::magicArraysInit();
+// 	Zobrist::init_keys();
+// 	Evaluation::initAll();
+// 	Board board = FenParser::parseFEN("k7/5p2/6p1/p1p3P1/P1P4P/1P6/8/K7 w - -");
+// 	board.print();
+// 	int m = 0, e = 0;
+// 	backward_pawns_chained(board, m, e);
+// 	printf("m=%d e=%d\n", m, e);
+// 	return 0;
+// }

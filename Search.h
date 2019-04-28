@@ -13,6 +13,14 @@ using std::chrono::milliseconds;
 typedef std::chrono::duration<std::chrono::system_clock> time_interv;
 */
 
+//Eval type
+enum {
+    empty = 0,
+    lowerbound = 1,
+    upperbound = 2,
+    exact = 3
+};
+
 class SearchInfo{
 	public:		
 		U64 startTime;
@@ -39,15 +47,15 @@ class Search{
 		static const int KILLER_BONUS_1 = 800000;
 		
 		static int VICTIM_SCORES[14];
-		static int MVV_VLA_SCORES[14][14];
-		//static MoveScore moveScore[Move::MAX_LEGAL_MOVES];
+		static int MVV_VLA_SCORES[14][14];		
 		static std::vector<MoveScore> moveScore;
 		void clearSearch();
 		int Quiescence(int alpha, int beta);
 
 	public:
-		static const int INFINITE = 30000;
-		static const int MATE = 29000;
+		static const int INFINITE;
+		//static const int MATE = 29000;
+		static const int ENDGAME_MAT = 1779;
 		
 		void stop();
 		static void initHeuristics();
@@ -59,8 +67,9 @@ class Search{
 		//static U64 interval_ms(const time_interv& t1, const time_interv& t2);
 		//static U64 interval_ms(const clock_t& t1, const clock_t& t2);
 		void checkUp(SearchInfo& info);
-		static void orderMoves(Board& board, MoveList& moves, int pvMove);
-		void search();
+		static void orderMoves(Board& board, MoveList& moves, int pvMove);		
+		int search(bool verbose);
+		int aspirationWindow(Board* board, int depth, int score);
 		int alphaBeta(int alpha, int beta, int depth, bool doNull);
 		static bool isBadCapture(const Board& board, int move, int side);
 	

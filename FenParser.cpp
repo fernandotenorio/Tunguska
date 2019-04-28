@@ -4,6 +4,7 @@
 #include "StringUtils.h"
 #include "BitBoardGen.h"
 #include <iostream>
+#include "Evaluation.h"
 
 Board FenParser::parseFEN(std::string fen){
 	
@@ -20,29 +21,29 @@ Board FenParser::parseFEN(std::string fen){
 
 	//Player
 	if(player == "w")
-		board.state = BoardState::setCurrentPlayer(board.state, Board::WHITE);
+		board.state.currentPlayer = Board::WHITE;
 	else
-		board.state = BoardState::setCurrentPlayer(board.state, Board::BLACK);
+		board.state.currentPlayer = Board::BLACK;
 	
 	//Castle
 	if (castle == "-")
-		board.state &= ~(BoardState::WK_CASTLE | BoardState::WQ_CASTLE | BoardState::BK_CASTLE | BoardState::BQ_CASTLE);
+		board.state.castleKey = 0;
 	if (stringContains(castle, "K"))
-		board.state |= BoardState::WK_CASTLE;
+		board.state.castleKey|= BoardState::WK_CASTLE;
 	if (stringContains(castle, "Q"))
-		board.state |= BoardState::WQ_CASTLE;
+		board.state.castleKey|= BoardState::WQ_CASTLE;
 	if (stringContains(castle, "k"))
-		board.state |= BoardState::BK_CASTLE;
+		board.state.castleKey|= BoardState::BK_CASTLE;
 	if (stringContains(castle, "q"))
-		board.state |= BoardState::BQ_CASTLE;
+		board.state.castleKey|= BoardState::BQ_CASTLE;
 
 	//Default half moves & full moves
-	board.state = BoardState::setHalfMoves(board.state, 0);
+	board.state.halfMoves = 0;
 	board.fullMoves = 1;
 
 	//Half moves
 	if (comps.size() > 4)
-		board.state = BoardState::setHalfMoves(board.state, std::stoi(comps[4]));
+		board.state.halfMoves = std::stoi(comps[4]);
 		
 	//Full Moves
 	if (comps.size() > 5)
@@ -50,9 +51,9 @@ Board FenParser::parseFEN(std::string fen){
 
 	//Ep
 	if(epSquare == "-")
-		board.state = BoardState::setEpSquare(board.state, 0);
+		board.state.epSquare = 0;
 	else
-		board.state = BoardState::setEpSquare(board.state, Board::squareForCoord(epSquare));
+		board.state.epSquare = Board::squareForCoord(epSquare);
 		
 	for (int i = 0; i < 8; i++){
 		std::string row = position.at(i);
@@ -85,11 +86,27 @@ Board FenParser::parseFEN(std::string fen){
 		board.bitboards[board.board[s] & 1] |= BitBoardGen::ONE << s;
 	}
 
+	//king squares
+	int wk = numberOfTrailingZeros(board.bitboards[Board::WHITE_KING]);
+	int bk = numberOfTrailingZeros(board.bitboards[Board::BLACK_KING]);
+	board.kingSQ[0] = wk;
+	board.kingSQ[1] = bk;
+
 	//zobrist key
 	board.zKey = Zobrist::getKey(board);
+	board.state.zKey = board.zKey;
 
 	//hist ply
-	board.histPly = 2*(board.fullMoves - 1) + (player == "w" ? 0:1);
-	
+	board.histPly = 0;//2*(board.fullMoves - 1) + (player == "w" ? 0:1);
+
+	//count material
+	for(int i = 0; i < 64; i++){
+		if(! board.board[i])
+			continue;
+		if ((board.board[i] & 1) == Board::WHITE)
+			board.material[0]+= Evaluation::PIECE_VALUES[board.board[i]];
+		else
+			board.material[1]+= abs(Evaluation::PIECE_VALUES[board.board[i]]);
+	}
 	return board;
 }

@@ -33,11 +33,13 @@ const int index64_lead[64] = {
 //inline or duplicated symbol error
 inline int numberOfTrailingZeros(U64 bb){
    assert (bb != 0);
-   return index64_trail[((bb & -bb) * debruijn64) >> 58];
+   //return index64_trail[((bb & -bb) * debruijn64) >> 58];
+  return __builtin_ctzll(bb);
 }
 
 inline int numberOfLeadingZeros(U64 bb){
    assert (bb != 0);
+   /*
    bb |= bb >> 1; 
    bb |= bb >> 2;
    bb |= bb >> 4;
@@ -45,6 +47,8 @@ inline int numberOfLeadingZeros(U64 bb){
    bb |= bb >> 16;
    bb |= bb >> 32;
   return index64_lead[(bb * debruijn64) >> 58];
+  */
+  return 63 - __builtin_clzll(bb);
 }
 
 #endif
