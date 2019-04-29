@@ -70,6 +70,7 @@ void Board::setHashTable(HashTable *tb){
 
 BoardState Board::makeNullMove(){
 	BoardState undo = BoardState(state);
+	undo.zKey = zKey;
 	
 	//Save pos key
 	zHist[histPly] = zKey;
@@ -95,22 +96,23 @@ BoardState Board::makeNullMove(){
 
 void Board::undoNullMove(BoardState undo){
 	//Zobrist clear ep
-	if (state.epSquare != 0)
-		zKey = Zobrist::xorEP(zKey, state.epSquare);
+	//if (state.epSquare != 0)
+	//	zKey = Zobrist::xorEP(zKey, state.epSquare);
 
 	state = undo;
 
 	//Zobrist clear ep
-	if (state.epSquare != 0)
-		zKey = Zobrist::xorEP(zKey, state.epSquare);
+	//if (state.epSquare != 0)
+	//	zKey = Zobrist::xorEP(zKey, state.epSquare);
 
 	int side = state.currentPlayer;
 	int opp = side^1;
 
-	zKey = Zobrist::xorSide(zKey);
+	//zKey = Zobrist::xorSide(zKey);
 	histPly--;
 	ply--;
 
+	zKey = undo.zKey;
 	assert(Zobrist::getKey(*this) == zKey);
 }
 
@@ -120,6 +122,7 @@ static BoardState invalidState;
 BoardState Board::makeMove(int move){
 	BoardState undo = BoardState(state);
 	undo.valid = true;
+	undo.zKey = zKey;
 
 	assert(Move::toLongNotation(move) != "a1a1");
 	
@@ -185,7 +188,9 @@ BoardState Board::makeMove(int move){
 		zKey = Zobrist::xorSquare(zKey, movingPiece, from);	
 		zKey = Zobrist::xorSquare(zKey, promoteTo, to);
 	}
-	else if (isCastle){		
+	else if (isCastle){
+		
+		//sq = [k_from, k_to, rook_from, rook_to]
 		int *sq = CASTLE_SQS[from][side];
 		board[sq[0]] = EMPTY;
 		board[sq[2]] = EMPTY;
@@ -339,20 +344,20 @@ void Board::undoMove(int move, BoardState undo){
 	assert(Move::toLongNotation(move) != "a1a1");
 	
 	//Zobrist clear castle
-	zKey = Zobrist::xorCastle(zKey, state.castleKey);
+	//zKey = Zobrist::xorCastle(zKey, state.castleKey);
 
 	//Zobrist clear ep
-	if (state.epSquare != 0)
-		zKey = Zobrist::xorEP(zKey, state.epSquare);
+	//if (state.epSquare != 0)
+	//	zKey = Zobrist::xorEP(zKey, state.epSquare);
 
 	state = undo;
 
 	//Zobrist clear ep
-	if (state.epSquare != 0)
-		zKey = Zobrist::xorEP(zKey, state.epSquare);
+	//if (state.epSquare != 0)
+	//	zKey = Zobrist::xorEP(zKey, state.epSquare);
 
 	//Zobrist clear castle
-	zKey = Zobrist::xorCastle(zKey, state.castleKey);
+	//zKey = Zobrist::xorCastle(zKey, state.castleKey);
 	
 	int side = state.currentPlayer;
 	int opp = side^1;
@@ -379,7 +384,7 @@ void Board::undoMove(int move, BoardState undo){
 		bitboards[side] = BitBoardGen::zeroBit(bitboards[side], to);
 
 		//Zobrist xor out from xor in to, xor in new ep
-		zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);		
+		//zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);		
 	}
 	else if(promoteTo != EMPTY){
 			board[from] = PAWN | side;
@@ -394,11 +399,10 @@ void Board::undoMove(int move, BoardState undo){
 			material[side]-= abs(Evaluation::PIECE_VALUES[promoteTo]);
 
 			//Zobrist xor out from, xor in promoted
-			zKey = Zobrist::xorSquare(zKey, side | PAWN, from);
-			zKey = Zobrist::xorSquare(zKey, promoteTo, to);
+			//zKey = Zobrist::xorSquare(zKey, side | PAWN, from);
+			//zKey = Zobrist::xorSquare(zKey, promoteTo, to);
 	}
-	else if (isCastle){	
-			//sq = [k_from, k_to, rook_from, rook_to]
+	else if (isCastle){				
 			int *sq = CASTLE_SQS[from][side];
 			board[sq[0]] = KING | side;
 			board[sq[2]] = ROOK | side;
@@ -418,9 +422,9 @@ void Board::undoMove(int move, BoardState undo){
 			bitboards[side] = BitBoardGen::zeroBit(bitboards[side], sq[3]);
 
 			//king
-			zKey = Zobrist::xorFromTo(zKey, side | KING, sq[0], sq[1]);
+			//zKey = Zobrist::xorFromTo(zKey, side | KING, sq[0], sq[1]);
 			//rook
-			zKey = Zobrist::xorFromTo(zKey, side | ROOK, sq[2], sq[3]);
+			//zKey = Zobrist::xorFromTo(zKey, side | ROOK, sq[2], sq[3]);
 	}
 	else if(isEP){
 			board[from] = movingPiece;
@@ -438,8 +442,8 @@ void Board::undoMove(int move, BoardState undo){
 			material[opp]+= Evaluation::PAWN_VAL;
 
 			//Zobrist
-			zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);
-			zKey = Zobrist::xorSquare(zKey, opp | PAWN, to + MoveGen::epCaptDiff[side]);
+			//zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);
+			//zKey = Zobrist::xorSquare(zKey, opp | PAWN, to + MoveGen::epCaptDiff[side]);
 	}
 	else{
 		board[from] = movingPiece;
@@ -450,7 +454,7 @@ void Board::undoMove(int move, BoardState undo){
 		bitboards[side] = BitBoardGen::zeroBit(bitboards[side], to);
 
 		//Zobrist			
-		zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);		
+		//zKey = Zobrist::xorFromTo(zKey, movingPiece, to, from);		
 	}
 	
 	//update capture BBs
@@ -462,12 +466,13 @@ void Board::undoMove(int move, BoardState undo){
 		material[opp]+= abs(Evaluation::PIECE_VALUES[capt]);
 
 		//Zobrist			
-		zKey = Zobrist::xorSquare(zKey, capt, to);
+		//zKey = Zobrist::xorSquare(zKey, capt, to);
 	}
-	zKey = Zobrist::xorSide(zKey);
+	//zKey = Zobrist::xorSide(zKey);
 	histPly--;
 	ply--;
 
+	zKey = undo.zKey;
 	assert(Zobrist::getKey(*this) == zKey);
 	
 }
