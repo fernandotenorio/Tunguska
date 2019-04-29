@@ -14,6 +14,7 @@ std::string Board::RANKS[8] = {"1", "2", "3", "4", "5", "6", "7", "8"};
 std::string Board::FILES[8] = {"a", "b", "c", "d", "e", "f", "g", "h"};
 std::string Board::START_POS = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+static const int ERASE_CASTLE[2] = {~BoardState::W_CASTLE_BOTH, ~BoardState::B_CASTLE_BOTH};
 
 static const int CASTLE_PERM[64] = {
 	~BoardState::WQ_CASTLE, BoardState::CASTLE_ALL, BoardState::CASTLE_ALL, BoardState::CASTLE_ALL, ~BoardState::W_CASTLE_BOTH, BoardState::CASTLE_ALL, BoardState::CASTLE_ALL, ~BoardState::WK_CASTLE,
@@ -200,11 +201,7 @@ BoardState Board::makeMove(int move){
 		//update king square			
 		kingSQ[side] = sq[1];
 		
-		//@optimize
-		if (side == WHITE)
-			state.castleKey&= ~BoardState::W_CASTLE_BOTH;
-		else
-			state.castleKey&= ~BoardState::B_CASTLE_BOTH;
+		state.castleKey&= ERASE_CASTLE[side];
 		
 		bitboards[side | KING] = BitBoardGen::zeroBit(bitboards[side | KING], sq[0]);
 		bitboards[side | ROOK] = BitBoardGen::zeroBit(bitboards[side | ROOK], sq[2]);
