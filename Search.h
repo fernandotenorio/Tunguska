@@ -72,6 +72,7 @@ class Search{
 		int aspirationWindow(Board* board, int depth, int score);
 		int alphaBeta(int alpha, int beta, int depth, bool doNull);
 		static bool isBadCapture(const Board& board, int move, int side);
+		static int see(const Board* board, int toSq, int target, int fromSq, int aPiece);
 	
 };
 

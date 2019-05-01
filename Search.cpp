@@ -552,14 +552,9 @@ int Search::Quiescence(int alpha, int beta){
 		//Delta cutoff
 
 		//bad captures
-		/*
-		if (isBadCapture(board, moves.get(i), side) && (promo == 0)) {
-			//can simplify
-			bool cantSimplify = (capt - side == Board::PAWN) || (Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > 1300);
-			if (cantSimplify)
-				continue;
+		if (!promo && isBadCapture(board, moves.get(i), side)){
+			continue;
 		}
-		*/
 
 		BoardState undo = board.makeMove(moves.get(i));
 		if (!undo.valid)
@@ -592,34 +587,104 @@ int Search::Quiescence(int alpha, int beta){
 }
 
 bool Search::isBadCapture(const Board& board, int move, int side){
-	
-	int from = Move::from(move);
-	int pieceFrom = board.board[from];
+	int from = Move::from(move);	
+	int to = Move::to(move);	
+	int attacker = board.board[from];
+	int target = board.board[to];
 
-	if (pieceFrom - side == Board::PAWN){
-		return false;
-	}
-
-	int to = Move::to(move);
-	int capt = Move::captured(move);
-
-	if (abs(Evaluation::PIECE_VALUES[capt]) >= abs(Evaluation::PIECE_VALUES[pieceFrom]) - 50){
-		return false;
-	}
-
-	int opp = side^1;
-	//rook takes kn 325 + 200 < 500 (false, allowed)
-	//minor takes p 100 + 200 < 325 (true, not allowed) //change to allow sacrifice 
-	if ((BitBoardGen::BITBOARD_PAWN_ATTACKS[side][to] & board.bitboards[Board::PAWN | opp]) && 
-		abs(Evaluation::PIECE_VALUES[capt]) + 200 < abs(Evaluation::PIECE_VALUES[pieceFrom]))
-		return true;
-
-	if (abs(Evaluation::PIECE_VALUES[capt]) + 500 < abs(Evaluation::PIECE_VALUES[pieceFrom])){
-
-		if (BitBoardGen::BITBOARD_KNIGHT_ATTACKS[to] & board.bitboards[Board::KNIGHT | opp])
-			return true;
-	}
-	return false;
+	return Search::see(&board, to, target, from, attacker) < 0;
 }
 
+U64 getLeastValuablePiece(const Board* board, U64 attadef, int side, int& piece){
+	for (piece = Board::PAWN + side; piece <= Board::KING + side; piece+= 2){
+		U64 subset = attadef & board->bitboards[piece];
+		if (subset)
+			return subset & -subset;
+	}
+	return 0;
+}
+
+#include "Magic.h"
+U64 considerXrays(const Board* board, U64 occu, U64 attackdef, int sq) {
+	int color = board->state.currentPlayer;
+	U64 rookQueens = board->bitboards[Board::WHITE_ROOK] | board->bitboards[Board::WHITE_QUEEN] |
+					 board->bitboards[Board::BLACK_ROOK] | board->bitboards[Board::BLACK_QUEEN];
+
+    U64 bishopQueens = board->bitboards[Board::WHITE_BISHOP] | board->bitboards[Board::WHITE_QUEEN] |
+					   board->bitboards[Board::BLACK_BISHOP] | board->bitboards[Board::BLACK_QUEEN];
+
+
+	U64 att = (Magic::rookAttacksFrom(occu, sq) & rookQueens) | (Magic::bishopAttacksFrom(occu, sq) & bishopQueens);
+	return att & occu;
+
+	/*
+	// right, up, left, down
+	for (int dir = 0; dir < 4; dir++){		
+		if(!(attackdef & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]) && (occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq])) {
+			int n;
+			if (dir >= 2)
+        		n = numberOfLeadingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
+        	else
+        		n = numberOfTrailingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
+        	return BitBoardGen::SQUARES[n] & rookQueens;
+		}
+	}
+
+	U64 bishopQueens = board->bitboards[Board::WHITE_BISHOP] | board->bitboards[Board::WHITE_QUEEN] |
+					   board->bitboards[Board::BLACK_BISHOP] | board->bitboards[Board::BLACK_QUEEN];
+
+	// up right, up left, down left, down right
+	for (int dir = 4; dir < 8; dir++){		
+		if(!(attackdef & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]) && (occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq])) {
+			int n;
+			if (dir >= 6)       	
+        		n = numberOfLeadingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
+        	else
+        		n = numberOfTrailingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
+        	return BitBoardGen::SQUARES[n] & bishopQueens;
+		}
+	}
+	*/
+
+
+	return 0;
+}
+
+int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece){
+	int gain[32];
+	int d = 0;
+	int color = board->state.currentPlayer;
+	U64 mayXray = board->bitboards[Board::WHITE_PAWN] | board->bitboards[Board::BLACK_PAWN] | 
+				  board->bitboards[Board::WHITE_BISHOP] | board->bitboards[Board::BLACK_BISHOP] |
+				  board->bitboards[Board::WHITE_ROOK] | board->bitboards[Board::BLACK_ROOK] |
+				  board->bitboards[Board::WHITE_QUEEN] | board->bitboards[Board::BLACK_QUEEN];		
+
+	U64 fromSet = (BitBoardGen::ONE << fromSq);
+	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
+	U64 attadef = MoveGen::attackers_to(board, toSq, Board::WHITE) | MoveGen::attackers_to(board, toSq, Board::BLACK);	
+	gain[d] = abs(Evaluation::PIECE_VALUES[target]);
+
+	do {
+		d++;		
+		gain[d] = abs(Evaluation::PIECE_VALUES[aPiece]) - gain[d - 1];
+
+		if(std::max(-gain[d - 1], gain[d]) < 0) {
+            break;
+        }
+        attadef^= fromSet;
+        occup^= fromSet;
+
+        if(fromSet & mayXray) {
+            attadef|= considerXrays(board, occup, attadef, toSq);            
+        }                
+
+        color = !color;
+        fromSet = getLeastValuablePiece(board, attadef, color, aPiece);        
+	} while(fromSet);
+
+	while (--d)  {
+        gain[d - 1]= -std::max(-gain[d - 1], gain[d]);
+    }
+    return gain[0];
+}
 
