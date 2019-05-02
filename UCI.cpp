@@ -183,45 +183,6 @@ int main(){
 	Evaluation::initAll();
 	Search::initHeuristics();
 	Magic::magicArraysInit();
-
-	
-	//TestSuite::runFile("positions/STS1-STS15_LAN.EPD", 50);
-
-	//Perft::perft_pseudo("r1b1k2r/pp1p1pp1/4p2p/1P5q/1Qn1NP1P/4BP2/P3K1P1/R4B1R b kq - 0 17", 2, 1507);
-
-	/*
-	Perft p = Perft(Board::START_POS, 6, 119060324, false);	
-	clock_t begin = clock();
-	p.run();
-	clock_t end = clock();
-	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-	std::cout << "Perft(6) time (secs): " << elapsed_secs << std::endl;
-	*/
-
-	//Perft::divide("r1b1k2r/pp1p1pp1/4p2p/1P5q/1Qn1NP1P/4BP2/P3K1P1/R4B1R b kq - 0 17", 2);
-
-	/*
-	Board board = Board::fromFEN("8/8/2p1Q3/2P3pk/3P3p/6rP/PP3r1K/8 w - - 24 1");
-	MoveList moves;
-	MoveGen::pseudoLegalMoves(&board, 0, moves, false);
-	int legal = 0;
-
-	for (int i=0; i < moves.size(); i++){				
-		std::cout << "Trying Move: " << Move::toLongNotation(moves.get(i)) << std::endl;
-		int undo = board.makeMove(moves.get(i));
-
-		if (undo < 0){
-			std::cout << "Move: " << Move::toLongNotation(moves.get(i)) << " is Illegal" << std::endl;
-			continue;
-		} else{
-			std::cout << "Move: " << Move::toLongNotation(moves.get(i)) << " is Legal" << std::endl;
-			board.undoMove(moves.get(i), undo);
-			legal++;
-		}
-	}
-	std::cout <<  "Legal moves: " << legal << std::endl;
-	std::cout << board.toFEN() << std::endl;
-	*/
 	
 	UCI uci;
 	uci.uciLoop();
