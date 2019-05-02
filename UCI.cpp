@@ -173,7 +173,7 @@ void UCI::inputPosition(std::string str){
 #include "MoveGen.h"
 #include "TestSuite.h"
 
-// shit goes wrong here...
+// interesting positions
 // 8/8/2p1Q3/2P3pk/3P3p/6rP/PP3r1K/8 w - - 24 1
 // 4R3/8/8/4k3/8/5q2/1K6/8 b - - 98 1
 // position fen rn1qk2r/ppp1bppp/5n2/3p4/3P2b1/3B1N2/PPP2PPP/RNBQ1RK1 w kq - 6 7 moves h2h3 g4h5 b1d2 e8g8 d1e2 b8c6 e2e3 e7d6 d3f5 f8e8 e3b3 a8b8 g2g4 h5g6 f5g6 h7g6 c2c4 d6f4 c4c5 g6g5 b3d3 c6b4 d3b5 b4c2 a1b1 f6e4 b5a4 c2d4 a4d4 e4g3 d4d3 g3f1 g1f1 c7c6 d2b3 f4c1 b1c1 e8e4 b3d4 d8f6 f1g1 b8e8 b2b4 g8f8 a2a4 f6g6 c1d1 f8g8 g1g2 a7a6 b4b5 a6b5 a4b5 e8a8 d3d2 a8a4 d4f5 f7f6 f5d6 e4f4 d2e3 a4a2 b5b6 g8h7 d1d2 a2a8 d6b7 f4e4 e3d3 e4c4 d3g6 h7g6 f3d4 a8b8 d4c6 b8b7 c6a5 c4c5 a5b7 c5b5 b7d6 b5b6 d2d5 b6a6 d6f5 a6a7 g2f3 g6f7 f3e4 a7a4 d5d4 a4a7 f2f4 g5f4 e4f4 g7g5 f4e4 f7g6 d4d6 a7a4 f5d4 a4a1 d6d7 a1e1 e4f3 e1f1 f3e2 f1h1 d4f5 h1h2
