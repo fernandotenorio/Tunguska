@@ -1,24 +1,3 @@
-/*
---TODO
-- king safety tests http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=696199&t=62259
--add weak queen penalty, ie, queen on same line as opp rook bishop
--improve qsearch (ask on talkchess)
--add backward pawns
--king dist to passed pawn
--Add capture bonus for king distance
--Try to profile with g++
--Test other random64 code and compare speed
--add bad captures pruning in qsearch (see cpw)
--Change quiescence delta pruning (observe node cnt change)
--Try to separate good from bad captures(http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=688908&t=61616)
--Remove double call to isSquareAttacked inside can_castle
--make and use constant castle moves
--add extra prunning condition legal > n_moves
--add outpost bishop/knight bonus (protected by pawn, no enemy pawn on adjc files)
--change pawn value and pst for end phase (material_end term)
--optimize makemove dumb code
-*/
-
 #include "Evaluation.h"
 #include "MoveGen.h"
 #include "FenParser.h"
