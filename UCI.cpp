@@ -184,12 +184,7 @@ int main(){
 	Search::initHeuristics();
 	Magic::magicArraysInit();
 
-	/*
-	Board board = Board::fromFEN("r1b1k2r/pp1p1pp1/4p2p/1P5q/1Qn1NP1P/4BP2/P3K1P1/R4B1R b kq - 0 17");
-	printf("white castle ks = %d\n", board.state.white_can_castle_ks());
-	printf("white castle qs = %d\n", board.state.white_can_castle_qs());
-	*/
-
+	
 	//TestSuite::runFile("positions/STS1-STS15_LAN.EPD", 50);
 
 	//Perft::perft_pseudo("r1b1k2r/pp1p1pp1/4p2p/1P5q/1Qn1NP1P/4BP2/P3K1P1/R4B1R b kq - 0 17", 2, 1507);
