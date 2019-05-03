@@ -530,7 +530,7 @@ int Search::Quiescence(int alpha, int beta){
 	MoveList moves;
 	MoveGen::pseudoLegalCaptureMoves(&board, side, moves);
 	//true arg: only quiet promotions, capture promotions are already in pseudoLegalCaptures
-	//MoveGen::pawnPromotions(&board, side, moves, true);
+	MoveGen::pawnPromotions(&board, side, moves, true);
 
 	/*
 	if (atCheck)	
