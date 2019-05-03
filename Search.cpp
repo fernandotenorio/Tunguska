@@ -90,7 +90,22 @@ void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
 		if (promo){
 			moveScore[i].score = PROMO_BONUS + abs(Evaluation::PIECE_VALUES[promo]);
 		}
-		
+
+		//see
+		/*
+		if (false && capt > 0){
+			int from = Move::from(mv);	
+			int to = Move::to(mv);	
+			int attacker = board.board[from];
+			int target = board.board[to];
+
+			int seeScore = Search::see(&board, to, target, from, attacker);
+			if (seeScore < 0)
+				moveScore[i].score = seeScore;
+
+		}
+		*/
+
 		//PV override
 		if (mv == pvMove)
 			moveScore[i].score = PV_BONUS;
@@ -479,7 +494,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 }
 
 int Search::Quiescence(int alpha, int beta){
-
 	//check time
 	if ((info.nodes & 2047) == 0){
 		checkUp(info);
@@ -515,6 +529,8 @@ int Search::Quiescence(int alpha, int beta){
 	//bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
 	MoveList moves;
 	MoveGen::pseudoLegalCaptureMoves(&board, side, moves);
+	//true arg: only quiet promotions, capture promotions are already in pseudoLegalCaptures
+	//MoveGen::pawnPromotions(&board, side, moves, true);
 
 	/*
 	if (atCheck)	
@@ -644,12 +660,11 @@ U64 considerXrays(const Board* board, U64 occu, U64 attackdef, int sq) {
         	return BitBoardGen::SQUARES[n] & bishopQueens;
 		}
 	}
-	*/
-
-
 	return 0;
+	*/
 }
 
+//54.67% +/- 1.51% only at quiesce 2857 games
 int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece){
 	int gain[32];
 	int d = 0;
@@ -687,4 +702,5 @@ int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece
     }
     return gain[0];
 }
+
 

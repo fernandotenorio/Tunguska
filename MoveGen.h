@@ -24,6 +24,7 @@ class MoveGen{
 		static bool can_castle_qs(Board* board, int side, U64 occup);
 		static void pawnMoves(const Board* board, int side, MoveList& moves, U64 occup);
 		static void pawnCaptures(const Board* board, int side, MoveList& moves);
+		static void pawnPromotions(const Board* board, int side, MoveList& moves, bool only_quiet);
 		static void addPromotionsForDir(const Board* board, int side, U64 pushes, int diff[], int flags, MoveList& moves);
 		static void addMovesForDir(const Board* board, int side, U64 capts, int diff[], int flags, MoveList& moves);
 		static void add_moves(const Board* board, int from, U64 targets, int flags, MoveList& moves);
@@ -40,7 +41,7 @@ class MoveGen{
 		static bool isSquareAttacked(const Board* board, int sq, int bySide);
 		static U64 xrayRook(const Board* board, U64 blockers, int from, int side, U64 occup);
 		static U64 xrayBishop(const Board* board, U64 blockers, int from, int side, U64 occup);
-		static U64 pinnedBB(const Board* board, int side, int kingSQ);
+		static U64 pinnedBB(const Board* board, int side, int kingSQ);		
 };
 
 #endif

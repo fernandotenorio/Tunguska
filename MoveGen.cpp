@@ -89,7 +89,7 @@ bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pi
 	return !tmpCheck;
 }
 
-
+//Used in qsearch
 void MoveGen::pseudoLegalCaptureMoves(Board* board, int side, MoveList& capts){
 	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
 
@@ -171,6 +171,7 @@ bool MoveGen::can_castle_qs(Board* board, int side, U64 occup){
 	return true;
 }
 
+
 static int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
 static int diffs[2][2] = {{7, -9}, {9, -7}};
 static int promo_ranks[2] = {7, 0};
@@ -206,6 +207,38 @@ void MoveGen::pawnCaptures(const Board* board, int side, MoveList& moves){
 			addMovesForDir(board, side, capts, diff, Move::NO_FLAGS, moves);
 		if (eppCapt)
 			addMovesForDir(board, side, eppCapt, diff, Move::EP_FLAG, moves);
+		if (promotions_capt)
+			addPromotionsForDir(board, side, promotions_capt, diff, Move::NO_FLAGS, moves);
+	}
+}
+
+//Used in qsearch
+void MoveGen::pawnPromotions(const Board* board, int side, MoveList& moves, bool only_quiet){
+
+	U64 pawnBB = board->bitboards[Board::PAWN | side];
+	int opp = side^1;
+	U64 occup = board->bitboards[side] | board->bitboards[opp];
+	U64 pushes = BitBoardGen::circular_lsh(pawnBB, push_dir[side]) & ~occup;
+	U64 promotions_quiet = pushes & BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
+
+	if (promotions_quiet)
+		addPromotionsForDir(board, side, promotions_quiet, diff_push, Move::NO_FLAGS, moves);
+
+	if (only_quiet)
+		return;
+
+	U64 enemy = board->bitboards[opp] & ~board->bitboards[Board::KING | opp];
+	int epSquare = board->state.epSquare;
+	
+	for (int i = 0; i < 2; i++){
+		int *dir = dirs[i];
+		int *diff = diffs[i];
+		U64 wFile = BitBoardGen::WRAP_FILES[i];
+		
+		//captures left + right
+		U64 attacks = BitBoardGen::circular_lsh(pawnBB, dir[side]) & ~wFile;			
+		U64 promotions_capt = attacks & enemy & BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
+				
 		if (promotions_capt)
 			addPromotionsForDir(board, side, promotions_capt, diff, Move::NO_FLAGS, moves);
 	}
@@ -451,7 +484,7 @@ U64 MoveGen::xrayBishop(const Board* board, U64 blockers, int from, int side, U6
 }
 
 U64 MoveGen::pinnedBB(const Board* board, int side, int kingSQ){
-	int opp =  side^1;
+	int opp = side^1;
 	U64 occup = board->bitboards[side] | board->bitboards[opp];
 	U64 pinned = 0;
 	U64 pinner = (board->bitboards[Board::ROOK | opp] | board->bitboards[Board::QUEEN | opp]) & 
@@ -511,8 +544,6 @@ void MoveGen::solve_check_moves(const Board* board, U64 targets, int checker_sq,
 		add_moves(board, from, kn_targets, Move::NO_FLAGS, moves);
 		kn&= kn - 1;
 	}
-	
-	//U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
 
 	//bishops
 	U64 bishops = board->bitboards[Board::BISHOP | side];
@@ -630,5 +661,4 @@ void MoveGen::getEvasions(const Board* board, int side, MoveList& moves, U64 occ
 	//bishopMoves(board, side, moves);
 	//queenMoves(board, side, moves);
 }
-
 
