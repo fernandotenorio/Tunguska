@@ -277,7 +277,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		depth++;
 
 	//Quiesce
-	if (depth <= 0){				
+	if (depth <= 0){		
 		return Quiescence(alpha, beta);
 	}
 
@@ -494,6 +494,8 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 }
 
 int Search::Quiescence(int alpha, int beta){
+	assert(alpha < beta);
+
 	//check time
 	if ((info.nodes & 2047) == 0){
 		checkUp(info);
@@ -507,38 +509,42 @@ int Search::Quiescence(int alpha, int beta){
 	
 	int side = board.state.currentPlayer;
 	int opp = side^1;
+	int ks = board.kingSQ[side];
+	bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
 
-	if (board.ply > Board::MAX_DEPTH - 1){
-		printf("Reached Max Depth on Quiescence\n");
+	if (board.ply > Board::MAX_DEPTH - 1){		
 		return Evaluation::evaluate(board, side);
 	}
 
 	int score = Evaluation::evaluate(board, side);
 	int stand_pat = score;
 
-	//standing pat
-	if (score >= beta){
-		return beta;
+	if (!atCheck){		
+		if (score >= beta){
+			return beta;
+		}
+
+		if (score > alpha){
+			alpha = score;
+		}
 	}
 
-	if (score > alpha){
-		alpha = score;
-	}
-
-	int ks = board.kingSQ[side];
-	//bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
 	MoveList moves;
+	/*
 	MoveGen::pseudoLegalCaptureMoves(&board, side, moves);
 	//true arg: only quiet promotions, capture promotions are already in pseudoLegalCaptures
 	MoveGen::pawnPromotions(&board, side, moves, true);
-
-	/*
-	if (atCheck)	
-		MoveGen::MoveGen::getEvasions(board, side, moves);
-	else
-		MoveGen::pseudoLegalCaptureMoves(board, side, moves);
 	*/
-
+	
+	if (atCheck){		
+		U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+		MoveGen::getEvasions(&board, side, moves, occup);
+	}
+	else {
+		MoveGen::pseudoLegalCaptureMoves(&board, side, moves);
+		MoveGen::pawnPromotions(&board, side, moves, true);
+	}
+	
 	orderMoves(board, moves, Move::NO_MOVE);
 
 	int legal = 0;
@@ -557,18 +563,18 @@ int Search::Quiescence(int alpha, int beta){
 
 		//legal++;
 
-		//Delta cutoff (disable if endgame, ie material <= 1300)
+		//Delta cutoff (disable if endgame)
 		int capt = Move::captured(moves.get(i));
 		int promo = Move::promoteTo(moves.get(i));
 
-		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) &&
+		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&
 			(Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > ENDGAME_MAT) && (promo == 0)) {
 			continue;
 		}
 		//Delta cutoff
 
 		//bad captures
-		if (!promo && isBadCapture(board, moves.get(i), side)){
+		if (!promo && !atCheck && isBadCapture(board, moves.get(i), side)){
 			continue;
 		}
 
@@ -599,6 +605,12 @@ int Search::Quiescence(int alpha, int beta){
 		}
 	}
 	
+	if (legal == 0){
+		if (atCheck){
+			return -INFINITE + board.ply;
+		} 
+	}
+
 	return alpha;
 }
 
@@ -690,7 +702,7 @@ int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece
         occup^= fromSet;
 
         if(fromSet & mayXray) {
-            attadef|= considerXrays(board, occup, attadef, toSq);            
+            attadef|= considerXrays(board, occup, attadef, toSq);
         }                
 
         color = !color;
