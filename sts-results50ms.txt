@@ -1,16 +1,16 @@
-id "STS(v1.0) Undermine 37/100
-id "STS(v10.0) Simplification 67/100
-id "STS(v11.0) King Activity 28/100
-id "STS(v12.0) Center Control 44/100
-id "STS(v13.0) Pawn Play in the Center 51/100
-id "STS(v14.0) 7th Rank 45/100
-id "STS(v15.0) AT 23/100
-id "STS(v2.2) Open Files and Diagonals 29/100
-id "STS(v3.0) Knight Outposts/Repositioning/Centralization 43/100
-id "STS(v4.0) Square Vacancy 34/100
-id "STS(v5.0) Bishop vs Knight 52/100
+id "STS(v1.0) Undermine 38/100
+id "STS(v10.0) Simplification 66/100
+id "STS(v11.0) King Activity 32/100
+id "STS(v12.0) Center Control 47/100
+id "STS(v13.0) Pawn Play in the Center 54/100
+id "STS(v14.0) 7th Rank 53/100
+id "STS(v15.0) AT 19/100
+id "STS(v2.2) Open Files and Diagonals 37/100
+id "STS(v3.0) Knight Outposts/Repositioning/Centralization 47/100
+id "STS(v4.0) Square Vacancy 39/100
+id "STS(v5.0) Bishop vs Knight 54/100
 id "STS(v6.0) Recapturing 45/100
-id "STS(v7.0) Simplification 33/100
-id "STS(v8.0) AKPC 24/100
-id "STS(v9.0) Advancement of a/b/c pawns 29/100
-Found 584 of 1500 (38.9%)
+id "STS(v7.0) Simplification 32/100
+id "STS(v8.0) AKPC 25/100
+id "STS(v9.0) Advancement of a/b/c pawns 30/100
+Found 618 of 1500 (41.2%)
