@@ -704,11 +704,15 @@ void Evaluation::evalBishops(const Board& board, int& mg, int& eg){
 	int wb_cnt = BitBoardGen::popCount(board.bitboards[Board::WHITE_BISHOP]);
 	int bb_cnt = BitBoardGen::popCount(board.bitboards[Board::BLACK_BISHOP]);
 
-	//Bishop pair
-	std::pair<int, int> w_ev = wb_cnt > 1 ? std::make_pair(BISHOP_PAIR_MG, BISHOP_PAIR_EG) : std::make_pair(0, 0);
-	std::pair<int, int> b_ev = bb_cnt > 1 ? std::make_pair(BISHOP_PAIR_MG, BISHOP_PAIR_EG) : std::make_pair(0, 0);
-	mg+= w_ev.first - b_ev.first;
-	eg+= w_ev.second - b_ev.second;
+	//Bishop pair bonus
+	if (wb_cnt > 1){
+		mg+= BISHOP_PAIR_MG;
+		eg+= BISHOP_PAIR_EG;
+	}
+	if (bb_cnt > 1){
+		mg-= BISHOP_PAIR_MG;
+		eg-= BISHOP_PAIR_EG;
+	}
 
 	/*
 	//Pawns of same color penalty
