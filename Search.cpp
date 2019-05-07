@@ -567,8 +567,8 @@ int Search::Quiescence(int alpha, int beta){
 		int capt = Move::captured(moves.get(i));
 		int promo = Move::promoteTo(moves.get(i));
 
-		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&
-			(Evaluation::materialValueSide(board, opp) - abs(Evaluation::PIECE_VALUES[capt]) > ENDGAME_MAT) && (promo == 0)) {
+		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&			
+			(board.material[opp] - Evaluation::KING_VAL - abs(Evaluation::PIECE_VALUES[capt]) > ENDGAME_MAT) && (promo == 0)) {
 			continue;
 		}
 		//Delta cutoff
