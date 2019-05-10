@@ -41,7 +41,8 @@ class BitBoardGen{
 
 		static U64 FRONT_ATTACK_SPAN[2][64];
 		static U64 SQUARES[64];
-		static U64 DISTANCE_SQS[64][64];
+		static int DISTANCE_SQS[64][64];
+		static int DISTANCE_MAN[64][64];
 		static U64 LINES_BB[64][64];
 		static U64 PAWN_CONNECTED[2][64];
 		static U64 RANKS_4_5_6_7[2];

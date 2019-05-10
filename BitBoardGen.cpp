@@ -479,7 +479,8 @@ void BitBoardGen::initSquares(){
 		SQUARES[i] = ONE << i;
 }
 
-U64 BitBoardGen::DISTANCE_SQS[64][64];
+int BitBoardGen::DISTANCE_SQS[64][64];
+int BitBoardGen::DISTANCE_MAN[64][64];
 void BitBoardGen::initDistances(){
 	for (int i = 0; i < 64; i++){
 		for (int j = 0; j < 64; j++){
@@ -490,6 +491,7 @@ void BitBoardGen::initDistances(){
 
 			int rd = abs(rj - ri);
 			int fd = abs(fj - fi);
+			DISTANCE_MAN[i][j] = rd + fd;
 			DISTANCE_SQS[i][j] = std::max(rd, fd);
 		}
 	}
