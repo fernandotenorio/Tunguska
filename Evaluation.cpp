@@ -254,17 +254,16 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 
 	for (int side = 0; side < 2; side++){
 		
-		int opp = side^1;
-		int pawnSide = Board::PAWN | side;
-		U64 pawnBB = board.bitboards[pawnSide];
-		U64 pawns = board.bitboards[pawnSide];
+		int opp = side^1;		
+		U64 pawnBB = board.bitboards[Board::PAWN | side];
+		U64 pawns = pawnBB;
 		U64 oppPawns = board.bitboards[Board::PAWN | opp];
 
 		while (pawns){
 			int sq = numberOfTrailingZeros(pawns);
 			int file = sq & 7;
 
-			bool isolated = false;
+			bool isolated = false;			
 			
 			//isolated
 			if ((BitBoardGen::ADJACENT_FILES[file] & pawnBB) == 0){
@@ -285,6 +284,7 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 			}
 			
 			bool connected = false;
+
 			//connected
 			if (BitBoardGen::PAWN_CONNECTED[side][sq] & pawnBB){
 				mg+= s * PAWN_CONNECTED_BONUS_MG[side][sq];
@@ -304,7 +304,7 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 				int r = (side == Board::WHITE) ? sq >> 3 : (7 - (sq >> 3));
 
 				//rank 3
-				if (r > 3){
+				if (r > 2){
 					int w = (r - 2) * (r - 2) + 2;
 					int blockSq = sq + up_ahead[side];
 					int dopp = std::min(BitBoardGen::DISTANCE_SQS[blockSq][board.kingSQ[opp]], 5);
@@ -331,11 +331,11 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 						if (!(board.bitboards[opp] & bb))
 							unsafeSquares&= attCache->allAttacks(opp) | board.bitboards[opp];
 
-						int k = !unsafeSquares ? 20 : !(unsafeSquares & blockSq) ? 9 : 0;
+						int k = !unsafeSquares ? 20 : !(unsafeSquares & BitBoardGen::SQUARES[blockSq]) ? 9 : 0;
 
 						if (defendedSquares == squaresToQueen)
 							k+= 6;
-						else if (defendedSquares & blockSq)
+						else if (defendedSquares & BitBoardGen::SQUARES[blockSq])
 							k+= 4;
 
 						mg+= s * k * w;
