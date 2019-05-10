@@ -1,3 +1,24 @@
+/*
+--TODO
+- king safety tests http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=696199&t=62259
+-add weak queen penalty, ie, queen on same line as opp rook bishop
+-improve qsearch (ask on talkchess)
+-add backward pawns
+-king dist to passed pawn
+-Add capture bonus for king distance
+-Try to profile with g++
+-Test other random64 code and compare speed
+-add bad captures pruning in qsearch (see cpw)
+-Change quiescence delta pruning (observe node cnt change)
+-Try to separate good from bad captures(http://www.talkchess.com/forum/viewtopic.php?topic_view=threads&p=688908&t=61616)
+-Remove double call to isSquareAttacked inside can_castle
+-make and use constant castle moves
+-add extra prunning condition legal > n_moves
+-add outpost bishop/knight bonus (protected by pawn, no enemy pawn on adjc files)
+-change pawn value and pst for end phase (material_end term)
+-optimize makemove dumb code
+*/
+
 #include "Evaluation.h"
 #include "MoveGen.h"
 #include "FenParser.h"
@@ -143,7 +164,6 @@ static const int PAWN_CONNECTED_BONUS_EG[2][64] = {
 };
 
 int Evaluation::MIRROR64[64];
-int Evaluation::DISTANCE_BONUS[64][64];
 
 void Evaluation::initAll(){
 	for (int i = 0; i < 64; i++){
@@ -152,16 +172,6 @@ void Evaluation::initAll(){
 		int sqBlack = (7 - r)* 8 + c;
 		MIRROR64[i] = sqBlack;
 	}
-
-	for(int i = 0; i < 64; ++i) {
-        for(int j = 0; j < 64; ++j) {
-        	int fi = i & 7;
-        	int fj = j & 7;
-        	int ri = i >> 3;
-        	int rj = j >> 3;
-            DISTANCE_BONUS[i][j] = 14 - (abs(ri - rj) + abs(fi - fj));
-        }   
-    }
 }	
 
 void Evaluation::materialBalance(const Board& board, int& mg, int& eg){
@@ -257,16 +267,20 @@ void backward_pawns_chained(const Board& board, int& mg, int& eg){
 	}
 }
 
-void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
+void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *attCache){
 	
+	const int up_ahead[2] = {8, -8};	
 	int s = 1;
+	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+
 	for (int side = 0; side < 2; side++){
 		
+		int opp = side^1;
 		int pawnSide = Board::PAWN | side;
 		U64 pawnBB = board.bitboards[pawnSide];
 		U64 pawns = board.bitboards[pawnSide];
-		U64 oppPawns = board.bitboards[(side^1) | Board::PAWN];
-	
+		U64 oppPawns = board.bitboards[Board::PAWN | opp];
+
 		while (pawns){
 			int sq = numberOfTrailingZeros(pawns);
 			int file = sq & 7;
@@ -282,17 +296,21 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
 			
 			//passed
 			U64 frontSpan = BitBoardGen::FRONT_SPAN[side][sq];
+			bool passed = false;
 			
 			if ((frontSpan & oppPawns) == 0){
 				int r = sq >> 3;
 				mg+= s * PASSED_PAWN_BONUS_MG[side][r];
 				eg+= s * PASSED_PAWN_BONUS_EG[side][r];
+				passed = true;
 			}
 			
+			bool connected = false;
 			//connected
 			if (BitBoardGen::PAWN_CONNECTED[side][sq] & pawnBB){
 				mg+= s * PAWN_CONNECTED_BONUS_MG[side][sq];
 				eg+= s * PAWN_CONNECTED_BONUS_EG[side][sq];
+				connected = true;
 			}
 			pawns&= pawns - 1;
 
@@ -301,6 +319,94 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg){
 				mg+= s * DOUBLED_ISOLATED_PAWN_MG;
 				eg+= s * DOUBLED_ISOLATED_PAWN_EG;
 			}
+
+			//eval passed stockish 53.20% +/- 1.43% in 3440 games
+			if (passed){
+				int r = (side == Board::WHITE) ? sq >> 3 : (7 - (sq >> 3));
+
+				//rank 3
+				if (r > 3){
+					int w = (r - 2) * (r - 2) + 2;
+					int blockSq = sq + up_ahead[side];
+					int dopp = std::min(BitBoardGen::DISTANCE_SQS[blockSq][board.kingSQ[opp]], 5);
+					int dus = std::min(BitBoardGen::DISTANCE_SQS[blockSq][board.kingSQ[side]], 5);		
+					eg+= s * (5 * dopp - 2 * dus) * w;
+
+					if (r != 6)
+						eg+= -s * std::min(BitBoardGen::DISTANCE_SQS[blockSq + up_ahead[side]][board.kingSQ[side]], 5) * w;
+
+					if (!board.board[blockSq]){
+						U64 defendedSquares = BitBoardGen::SQUARES_AHEAD[side][sq];
+						U64 unsafeSquares = BitBoardGen::SQUARES_AHEAD[side][sq];
+						U64 squaresToQueen = BitBoardGen::SQUARES_AHEAD[side][sq];
+
+						U64 rooks_queens = board.bitboards[Board::WHITE_ROOK] | board.bitboards[Board::BLACK_ROOK] |
+										   board.bitboards[Board::WHITE_QUEEN] | board.bitboards[Board::BLACK_QUEEN];
+
+						U64 bb = BitBoardGen::SQUARES_AHEAD[opp][sq] & rooks_queens & Magic::rookAttacksFrom(occup, sq);
+
+						//should include pawns?
+						if (!(board.bitboards[side] & bb))
+							defendedSquares&= attCache->allAttacks(side);
+
+						if (!(board.bitboards[opp] & bb))
+							unsafeSquares&= attCache->allAttacks(opp) | board.bitboards[opp];
+
+						int k = !unsafeSquares ? 20 : !(unsafeSquares & blockSq) ? 9 : 0;
+
+						if (defendedSquares == squaresToQueen)
+							k+= 6;
+						else if (defendedSquares & blockSq)
+							k+= 4;
+
+						mg+= s * k * w;
+						eg+= s * k * w;
+
+					}
+				} //rank 3
+			}
+			//eval passed stockish
+
+
+			//eval passed old score 52.22% +/- 1.19% in 4910 games
+			/*
+			if (passed){
+				//King distance diff from passed pawn square (max val = 12)				
+				int kingsDelta = BitBoardGen::DISTANCE_SQS[sq][board.kingSQ[opp]] - BitBoardGen::DISTANCE_SQS[sq][board.kingSQ[side]];
+				mg+= s * 2 * kingsDelta;
+				eg+= s * 10 * kingsDelta;			
+
+				//is path to promotion clear?
+				if (!(BitBoardGen::SQUARES_AHEAD[side][sq] & board.bitboards[opp])) {
+					
+					// more connected bonus
+					if (connected){
+						mg+= s * PAWN_CONNECTED_BONUS_MG[side][sq];
+						eg+= s * PAWN_CONNECTED_BONUS_EG[side][sq];
+					}
+
+					//count number of enemy piece attacks (not pawns or king) at square ahead of pawn					
+					U64 sqAhead = BitBoardGen::SQUARES[sq + up_ahead[side]];
+					int attacks = attCache->countAttacksAt(sqAhead, opp);
+
+					//check if square ahead has no piece enemy or king attacks (pawn attacks are not possible because our pawn is passed)
+					if (!attacks && BitBoardGen::DISTANCE_SQS[sq + up_ahead[side]][board.kingSQ[opp]] > 1){
+						mg+= s * 20;
+						eg+= s * 40;						
+					}
+
+					//more bonus if the enemy has no attack at the promotion square	(needs: color white = 0, color black = 1)					
+					U64 promoSQ = BitBoardGen::SQUARES[opp * 56 + file];					
+					attacks = attCache->countAttacksAt(promoSQ, opp);
+
+					if (!attacks && BitBoardGen::DISTANCE_SQS[opp * 56 + file][board.kingSQ[opp]] > 1){
+						mg+= s * 20;
+						eg+= s * 40;						
+					}
+				}
+
+			} //if passed old
+			*/
 		}
 		s = -1;
 	}
@@ -406,12 +512,12 @@ void Evaluation::pieceOpenFile(const Board& board, int& mg, int& eg){
 	}
 }
 
-void Evaluation::kingAttack(const Board& board, int& mg){
-	mg+= kingAttackedSide(board, Board::BLACK) - kingAttackedSide(board, Board::WHITE);
+void Evaluation::kingAttack(const Board& board, int& mg, AttackCache *attCache){
+	mg+= kingAttackedSide(board, Board::BLACK, attCache) - kingAttackedSide(board, Board::WHITE, attCache);
 }
 
 // Return opp attack eval on king from side
-int Evaluation::kingAttackedSide(const Board& board, int side){
+int Evaluation::kingAttackedSide(const Board& board, int side, AttackCache *attCache){
 	int opp = side^1;
 	U64 king = board.bitboards[Board::KING | side];
 	int kingSq = numberOfTrailingZeros(king);
@@ -422,11 +528,13 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	
 	int numAttackers = 0;
 	int attackVal = 0;
+
 	//Attack weights
 	const int ROOK_AW = 137;
 	const int QUEEN_AW = 115;
 	const int BISHOP_AW = 11;
 	const int KNIGHT_AW = 95;
+
 	//Weight of attack by numAttackers, 0 or 1 attacker => 0 weight
 	const int ATTACK_W[] = {0, 0, 30, 75, 88, 94, 97, 99};
 
@@ -437,6 +545,9 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	while (rooks){	
 		int from = numberOfTrailingZeros(rooks);
 		U64 tmpTarg = Magic::rookAttacksFrom(occup, from);
+
+		//attack cache
+		attCache->rooks[opp]|= tmpTarg;
 
 		if (tmpTarg & region)
 			nrooks++;
@@ -451,7 +562,10 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	
 	while (queens){	
 		int from = numberOfTrailingZeros(queens);
-		U64 tmpTarg = Magic::rookAttacksFrom(occup, from) | Magic::bishopAttacksFrom(occup, from); 
+		U64 tmpTarg = Magic::rookAttacksFrom(occup, from) | Magic::bishopAttacksFrom(occup, from);
+
+		//attack cache
+		attCache->queens[opp]|= tmpTarg;
 
 		if (tmpTarg & region)	
 			nqueens++;
@@ -469,6 +583,9 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 		int from = numberOfTrailingZeros(bishops);
 		U64 tmpTarg = Magic::bishopAttacksFrom(occup, from);
 
+		//attack cache
+		attCache->bishops[opp]|=  tmpTarg;
+
 		if (tmpTarg & region)
 			nbishops++;
 		bishops&= bishops - 1;
@@ -484,6 +601,9 @@ int Evaluation::kingAttackedSide(const Board& board, int side){
 	while (knights){
 		int from = numberOfTrailingZeros(knights);
 		U64 tmpTarg = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
+
+		//attack cache
+		attCache->knights[opp]|=  tmpTarg;
 
 		if (tmpTarg & region)
 			nknights++;
@@ -580,10 +700,10 @@ void Evaluation::kingTropism(const Board& board, int& mg){
 
 		while(enemy){
 			int sq = numberOfTrailingZeros(enemy);
-			mg-= s * 4 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][0]);
-        	mg-= s * 3 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][1]);
-        	mg-= s * 2 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][2]);
-        	mg-= s * 2 * DISTANCE_BONUS[sq][kingSQ] * (board.board[sq] == tropism_enemy[side][3]);
+			mg-= s * 4 * (14 - BitBoardGen::DISTANCE_MAN[sq][kingSQ]) * (board.board[sq] == tropism_enemy[side][0]);
+        	mg-= s * 3 * (14 - BitBoardGen::DISTANCE_MAN[sq][kingSQ]) * (board.board[sq] == tropism_enemy[side][1]);
+        	mg-= s * 2 * (14 - BitBoardGen::DISTANCE_MAN[sq][kingSQ]) * (board.board[sq] == tropism_enemy[side][2]);
+        	mg-= s * 2 * (14 - BitBoardGen::DISTANCE_MAN[sq][kingSQ]) * (board.board[sq] == tropism_enemy[side][3]);
 			enemy&= enemy - 1;
 		}
 		s = -1;
@@ -765,6 +885,12 @@ void Evaluation::evalRooks(const Board& board, int& mg, int& eg){
 }
 
 //Mobility
+static const int MOB_N[2][9] = { {-15, -10, -5, 0, 5, 10, 10, 15, 15},  {-10, -5, 0, 1, 3, 7, 7, 10, 10}};
+static const int MOB_B[2][14] = {{-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 30, 35, 35, 35}, {-25, -20, -10, -5, 0, 7, 14, 22, 30, 35, 35, 38, 39, 40}};
+static const int MOB_R[2][15] = {{-5, -5, 0, 5, 10, 10, 15, 20, 30, 35, 35, 40, 40, 40, 40}, {-20, -15, -10, 0, 10, 15, 19, 25, 35, 38, 42, 45, 45, 45, 45}};
+static const int MOB_Q[2][28] = {{-5, -4, -3, -2, -1, 0, 5, 10, 13, 16, 18, 20, 22, 24, 26, 28, 29, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}, {-15, -10, -7, -5, -2, 0, 5, 7, 10, 14, 18, 20, 22, 24, 26, 28, 29, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}};		
+
+/*
 static const int MOB_N[2][9] = {{-75, -56, -9, -2, 6, 15, 22, 30, 36}, {-76, -54, -26, -10, 5, 11, 26, 28, 29}};
 static const int MOB_B[2][14] = {{-48, -21 ,16, 26, 37, 51, 54, 63, 65, 71, 79, 81, 92, 97}, {-58, -19, -2, 12, 22, 42, 54, 58, 63, 70, 74, 86, 90, 94}};
 static const int MOB_R[2][15] = {{-56, -25, -11, -5, -4, -1, 8, 14, 21, 23, 31, 32, 43, 49, 59}, {-78, -18, 26, 55, 70, 81, 109, 120, 128, 143, 154, 160, 165, 168, 169}};
@@ -772,21 +898,28 @@ static const int MOB_Q[2][28] = {{-40, -25, 2, 4, 14, 24, 25, 40, 43, 47, 54, 56
 					77, 85, 94, 99, 108, 112, 113, 118, 119, 123, 128}, 
 					{-35, -12, 7, 19, 37, 55, 62, 76, 79, 87, 94, 102, 111, 116, 118, 122,
 					128, 130, 133, 136, 140, 157, 158, 161, 174, 177, 191, 199}};
-					
-static int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
-static int diffs[2][2] = {{7, -9}, {9, -7}};
-void Evaluation::mobility(const Board& board, int& mg, int& eg){
+*/
+
+
+static const int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
+static const int diffs[2][2] = {{7, -9}, {9, -7}};
+
+static const U64 exclude_ranks[2] = {BitBoardGen::BITBOARD_RANKS[0] | BitBoardGen::BITBOARD_RANKS[1], 
+									 BitBoardGen::BITBOARD_RANKS[7] | BitBoardGen::BITBOARD_RANKS[6]};
+
+void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *attCache){
 	
-	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
+	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];	
 	int s = 1;
-	int scale = 3;
+	const int scale = 1;
+	const int scale_q = 1;
 	int n = 0;
 
 	for (int side = 0; side < 2; side++){
 		
 		int opp = side^1;
 		U64 oppPawnBB = board.bitboards[Board::PAWN | opp];
-		U64 oppPawnAttacks = 0;		
+		U64 oppPawnAttacks = 0;
 		
 		// if (oppPawnBB){
 		// 	for (int i = 0; i < 2; i++){
@@ -803,20 +936,30 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg){
 			oppPawnAttacks = ((oppPawnBB >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((oppPawnBB >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);
 		}
 		
+		//enemy or empty
+		U64 mobilityArea = ~(board.bitboards[side] | oppPawnAttacks); 
+		//U64 mobilityArea = ~(occup | oppPawnAttacks); 
+
+		//stockfish mobility area: Find our pawns that are blocked or on the first two ranks
+		//Squares occupied by those pawns, by our king or queen or controlled by
+		//enemy pawns are excluded from the mobility area.
+
 		//U64 king = board.bitboards[Board::KING | side];
-		
+		/*
 		U64 blockedPawns = 0;
 		if (side == Board::WHITE)
 			blockedPawns = board.bitboards[Board::WHITE_PAWN] & (board.bitboards[Board::BLACK] >> 8);
 		else
 			blockedPawns = board.bitboards[Board::BLACK_PAWN] & (board.bitboards[Board::WHITE] << 8);		
-		
+		*/
+
 		//U64 mobilityArea = ~(oppPawnAttacks | king | blockedPawns);
-		U64 mobilityArea = ~(board.bitboards[side] | board.bitboards[Board::KING | opp] | oppPawnAttacks | blockedPawns);
+		//U64 mobilityArea = ~(board.bitboards[side] | board.bitboards[Board::KING | opp] | oppPawnAttacks | blockedPawns);
 		//U64 mobilityArea = ~(oppPawnAttacks | king);
 		
 		
 		//knights
+		/*
 		U64 kn = board.bitboards[Board::KNIGHT | side];
 		U64 kn_mob = 0;
 		while(kn){
@@ -824,12 +967,16 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg){
 			kn_mob|= BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from];
 			kn&= kn - 1;
 		}
+		*/
 
-		n = BitBoardGen::popCount(kn_mob & mobilityArea);
-		mg+= s * MOB_N[0][n]/scale;
-		eg+= s * MOB_N[1][n]/scale;
+		if (board.bitboards[Board::KNIGHT | side]){
+			n = BitBoardGen::popCount(attCache->knights[side] & mobilityArea);
+			mg+= s * MOB_N[0][n]/scale;
+			eg+= s * MOB_N[1][n]/scale;
+		}
 
 		//bishops
+		/*
 		U64 bishop = board.bitboards[Board::BISHOP | side];
 		U64 bishop_mob = 0;
 		while(bishop){
@@ -837,12 +984,15 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg){
 			bishop_mob|= Magic::bishopAttacksFrom(occup, from);
 			bishop&= bishop - 1;
 		}
-		n = BitBoardGen::popCount(bishop_mob & mobilityArea);
-		mg+= s * MOB_B[0][n]/scale;
-		eg+= s * MOB_B[1][n]/scale;
-
+		*/
+		if (board.bitboards[Board::BISHOP | side]){
+			n = BitBoardGen::popCount(attCache->bishops[side] & mobilityArea);
+			mg+= s * MOB_B[0][n]/scale;
+			eg+= s * MOB_B[1][n]/scale;
+		}
 		
 		//rooks
+		/*
 		U64 rook = board.bitboards[Board::ROOK | side];
 		U64 rook_mob = 0;
 		while(rook){
@@ -850,11 +1000,15 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg){
 			rook_mob|= Magic::rookAttacksFrom(occup, from);
 			rook&= rook - 1;
 		}
-		n = BitBoardGen::popCount(rook_mob & mobilityArea);
-		mg+= s * MOB_R[0][n]/scale;
-		eg+= s * MOB_R[1][n]/scale;
-						
-		//queens		
+		*/
+	
+		if (board.bitboards[Board::ROOK | side]){
+			n = BitBoardGen::popCount(attCache->rooks[side] & mobilityArea);
+			mg+= s * MOB_R[0][n]/scale;
+			eg+= s * MOB_R[1][n]/scale;
+		}
+
+		//queen
 		U64 queen = board.bitboards[Board::QUEEN | side];
 		U64 queen_mob = 0;
 		while(queen){
@@ -862,10 +1016,14 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg){
 			queen_mob|= Magic::queenAttacksFrom(occup, from);
 			queen&= queen - 1;
 		}
-		n = BitBoardGen::popCount(queen_mob & mobilityArea);
-		mg+= s * MOB_Q[0][n]/scale;
-		eg+= s * MOB_Q[1][n]/scale;
 
+		
+		if (board.bitboards[Board::QUEEN | side]){
+			n = BitBoardGen::popCount(attCache->queens[side] & mobilityArea);
+			mg+= s * MOB_Q[0][n]/scale_q;
+			eg+= s * MOB_Q[1][n]/scale_q;
+		}
+		
 		s = -1;
 	}
 }
@@ -969,7 +1127,7 @@ void Evaluation::outposts(const Board& board, int&mg, int&eg){
 }
 
 
-//maybe add same line as opp king/queen bonus? Same idea for rook
+static AttackCache attCache;
 int Evaluation::evaluate(const Board& board, int side){
 
 	/* TODO
@@ -984,18 +1142,21 @@ int Evaluation::evaluate(const Board& board, int side){
 	
 	int mg = 0;
 	int eg = 0;
+
+	// reset attack cache
+	attCache.reset();
 	
 	materialBalance(board, mg, eg);
-	pieceSquaresBalance(board, mg, eg);
-	evalPawns(board, mg, eg);
+	pieceSquaresBalance(board, mg, eg);	
 	pieceOpenFile(board, mg, eg);
-	kingAttack(board, mg);
+	kingAttack(board, mg, &attCache);
 	//kingTropism(board, mg);
+	evalPawns(board, mg, eg, &attCache);
 	kingShelter(board, mg);
 	evalBishops(board, mg, eg);
 	evalRooks(board, mg, eg);
 	outposts(board, mg, eg);
-	//mobility(board, mg, eg);
+	//mobility(board, mg, eg, &attCache);
 	
 	int phase = get_phase(board);
 	int eval = ((mg * (256 - phase)) + (eg * phase))/256;

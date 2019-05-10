@@ -5,14 +5,51 @@
 
 enum ending_type {KNB_K, KRR_KQ, OTHER_ENDING}; 
 
-/*
-struct AttackInfo{
+
+struct AttackCache{
 	U64 rooks[2];
 	U64 knights[2];
 	U64 bishops[2];
 	U64 queens[2];
+	U64 pawns[2];
+
+	AttackCache(){
+		reset();
+	}
+
+	int countAttacksAt(U64 sq, int side){
+		int attacks = 0;
+		
+		if (sq & rooks[side]) 
+			attacks++;
+		if (sq & knights[side]) 
+			attacks++;
+		if (sq & bishops[side]) 
+			attacks++;
+		if (sq & queens[side]) 
+			attacks++;
+
+		return attacks;
+	}
+
+	U64 allAttacks(int side){
+		return rooks[side] | knights[side] | bishops[side] | queens[side];
+	}
+
+	void reset(){
+		rooks[0] = 0; 
+		rooks[1] = 0;
+		knights[0] = 0;
+		knights[1] = 0;
+		queens[0] = 0;
+		queens[1] = 0;
+		bishops[0] = 0;
+		bishops[1] = 0;
+		pawns[0] = 0; 
+		pawns[1] = 0;
+	}
 };
-*/
+
 
 class Evaluation{
 	
@@ -30,22 +67,21 @@ class Evaluation{
 	static int PIECE_SQUARES_MG[14][64];
 	static int PIECE_SQUARES_END[14][64];
 	static int MIRROR64[64];
-	static int DISTANCE_BONUS[64][64];
 
 	static void materialBalance(const Board& board, int& mg, int& eg);
 	static void pieceSquaresBalance(const Board& board, int& mg, int& eg);
-	static void evalPawns(const Board& board, int& mg, int& eg);
+	static void evalPawns(const Board& board, int& mg, int& eg, AttackCache *attCache);
 	static bool materialDraw(const Board& board);
 	static void pieceOpenFile(const Board& board, int& mg, int& eg);
-	static void kingAttack(const Board& board, int& mg);
-	static int kingAttackedSide(const Board& board, int side);
+	static void kingAttack(const Board& board, int& mg, AttackCache *attCache);
+	static int kingAttackedSide(const Board& board, int side, AttackCache *attCache);
 	static void kingShelter(const Board& board, int& mg);
 	static void kingTropism(const Board& board, int& mg);
 	static int countMaterial(const Board& board, int piece);
 	static int materialValueSide(const Board& board, int side);
 	static void evalBishops(const Board& board, int& mg, int& eg);
 	static void evalRooks(const Board& board, int& mg, int& eg);
-	static void mobility(const Board& board, int& mg, int& eg);
+	static void mobility(const Board& board, int& mg, int& eg, AttackCache *attCache);
 	static void outposts(const Board& board, int&mg, int&eg);
 	static int evalKBN_K(const Board& board, int side);
 	
