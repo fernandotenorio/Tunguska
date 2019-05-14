@@ -252,6 +252,18 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 	int s = 1;
 	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
 
+	//update attCache pawn attacks
+	attCache->pawns[0] = ((board.bitboards[Board::WHITE_PAWN] << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((board.bitboards[Board::WHITE_PAWN] << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
+	attCache->pawns[1] = ((board.bitboards[Board::BLACK_PAWN] >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((board.bitboards[Board::BLACK_PAWN] >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);
+
+	//update attCache all attacks
+	attCache->all[0] = attCache->rooks[0] | attCache->knights[0] | attCache->bishops[0] | attCache->queens[0] | attCache->pawns[0];
+	attCache->all[1] = attCache->rooks[1] | attCache->knights[1] | attCache->bishops[1] | attCache->queens[1] | attCache->pawns[1];
+
+	//update attCache all2 attacks
+	attCache->all2[0] = attCache->rooks[0] & attCache->knights[0] & attCache->bishops[0] & attCache->queens[0] & attCache->pawns[0];
+	attCache->all2[1] = attCache->rooks[1] & attCache->knights[1] & attCache->bishops[1] & attCache->queens[1] & attCache->pawns[1];
+
 	for (int side = 0; side < 2; side++){
 		
 		int opp = side^1;		
@@ -548,7 +560,7 @@ int Evaluation::kingAttackedSide(const Board& board, int side, AttackCache *attC
 
 		if (tmpTarg & region)	
 			nqueens++;
-		queens &= queens - 1;
+		queens&= queens - 1;
 	}
 	
 	numAttackers+= nqueens;
@@ -915,7 +927,7 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *att
 			mg+= s * MOB_N[0][n]/scale;
 			eg+= s * MOB_N[1][n]/scale;
 		}
-		/*
+		
 		//bishops		
 		if (board.bitboards[Board::BISHOP | side]){
 			n = BitBoardGen::popCount(attCache->bishops[side] & mobilityArea);
@@ -929,7 +941,7 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *att
 			mg+= s * MOB_R[0][n]/scale;
 			eg+= s * MOB_R[1][n]/scale;
 		}
-		*/
+		
 		//queen		
 		if (board.bitboards[Board::QUEEN | side]){
 			n = BitBoardGen::popCount(attCache->queens[side] & mobilityArea);
@@ -1039,6 +1051,101 @@ void Evaluation::outposts(const Board& board, int&mg, int&eg){
 	}
 }
 
+//From Ethereal engine
+void Evaluation::threats(const Board& board, int& mg, int& eg, AttackCache *attCache){
+	int s = 1;
+	int count;
+	const U64 rank3[2] = {BitBoardGen::BITBOARD_RANKS[2], BitBoardGen::BITBOARD_RANKS[5]};
+	const U64 pawnAttacks[2] = {
+		//((board.bitboards[Board::WHITE_PAWN] << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((board.bitboards[Board::WHITE_PAWN] << 7) & ~BitBoardGen::BITBOARD_FILES[7]),
+		//((board.bitboards[Board::BLACK_PAWN] >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((board.bitboards[Board::BLACK_PAWN] >> 7) & ~BitBoardGen::BITBOARD_FILES[0])
+		attCache->pawns[0], attCache->pawns[1]
+	};
+
+	for (int side = 0; side < 2; side++){
+		int opp = side^1;
+
+		U64 friendly = board.bitboards[side];
+		U64 enemy = board.bitboards[opp];
+		U64 occup = friendly | enemy;
+
+		U64 pawns = board.bitboards[Board::PAWN | side];
+		U64 knights = board.bitboards[Board::KNIGHT | side];
+		U64 bishops = board.bitboards[Board::BISHOP | side];
+		U64 rooks = board.bitboards[Board::ROOK | side];
+		U64 queens = board.bitboards[Board::QUEEN | side];
+
+		U64 attackByPawns = pawnAttacks[opp];
+		U64 r3 = rank3[side];
+
+		U64 attackByMinors = attCache->knights[opp] | attCache->bishops[opp];
+		U64 attackByMajors = attCache->rooks[opp] | attCache->queens[opp];
+
+		U64 poorlyDefended = (attCache->allAttacks(opp) & ~attCache->allAttacks(side))
+							 | (attCache->attacks2(opp) & ~attCache->attacks2(side) & ~pawnAttacks[side]);
+
+		U64 overloaded = (knights | bishops | rooks | queens)
+						& attCache->allAttacks(side) & ~attCache->attacks2(side)
+						& attCache->allAttacks(opp) & ~attCache->attacks2(opp);
+		
+		//maybe add pawn attacks to attCache?
+		U64 pushThreat = ~occup & (side == Board::WHITE ? (pawns << 8) : (pawns >> 8));
+		pushThreat|= ~occup & (side == Board::WHITE ? ((pushThreat & ~attackByPawns & r3) << 8) : ((pushThreat & ~attackByPawns & r3) >> 8));
+		pushThreat&= ~attackByPawns & (attCache->allAttacks(side) | ~attCache->allAttacks(opp));
+
+		//attacks bu push
+		if (side == Board::WHITE){
+			pushThreat = ((pushThreat << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((pushThreat << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
+		} else{
+			pushThreat = ((pushThreat >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((pushThreat >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);	
+		}
+		
+		pushThreat&= (enemy & ~pawnAttacks[side]);		
+
+		//poorly supported pawns
+		// count = BitBoardGen::popCount(pawns & ~attackByPawns & poorlyDefended);
+		// mg+= s * count * (-15);
+		// eg+= s * count * (-30);
+
+		//threat against our minors		 
+		count = BitBoardGen::popCount((knights | bishops) & attackByPawns);
+		mg+= s * count * (-28);
+		eg+= s * count * (-20);
+
+		//penalty for minor agains minor
+		count = BitBoardGen::popCount((knights | bishops) & attackByMinors);
+		mg+= s * count * (-30);
+		eg+= s * count * (-40);
+
+		//penalty for all major threats against poorly supported minors
+		// count = BitBoardGen::popCount((knights | bishops) & poorlyDefended & attackByMajors);
+		// mg+= s * count * (-15);
+		// eg+= s * count * (-30);
+
+		 //penalty for pawn and minor threats against our rooks
+    	count = BitBoardGen::popCount(rooks & (attackByPawns | attackByMinors));
+    	mg+= s * count * (-30);
+		eg+= s * count * (-10);
+
+		 //penalty for any threat against our queens
+    	count = BitBoardGen::popCount(queens & attCache->allAttacks(opp));
+    	mg+= s * count * (-35);
+		eg+= s * count * (-15);
+
+		//penalty for any overloaded minors or majors
+		// count = BitBoardGen::popCount(overloaded);
+		// mg+= s * count * (-8);
+		// eg+= s * count * (-16);
+
+		//bonus for giving threats by safe pawn pushes
+		count = BitBoardGen::popCount(pushThreat);
+		mg+= s * count * 16;
+		eg+= s * count * 20;
+
+		s = -1;
+	}
+}
+
 
 static AttackCache attCache;
 int Evaluation::evaluate(const Board& board, int side){
@@ -1070,6 +1177,7 @@ int Evaluation::evaluate(const Board& board, int side){
 	evalRooks(board, mg, eg);
 	outposts(board, mg, eg);
 	//mobility(board, mg, eg, &attCache);
+	threats(board, mg, eg, &attCache);
 	
 	int phase = get_phase(board);
 	int eval = ((mg * (256 - phase)) + (eg * phase))/256;
