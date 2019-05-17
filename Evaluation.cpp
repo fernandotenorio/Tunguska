@@ -14,26 +14,26 @@
 #define KING_SQ {20, 30, 10,  0,  0, 10, 30, 20,20, 20,  0,  0,  0,  0, 20, 20,-10,-20,-20,-20,-20,-20,-20,-10,-20,-30,-30,-40,-40,-30,-30,-20,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30}							 
 #define KING_END_SQ {-50, -40, 0, 0, 0,	0, -40,	-50, -20, 0, 10, 15, 15, 10, 0,	-20, 0,	10,	20,	20,	20,	20,	10,	0, 0, 10, 30, 40, 40, 30, 10, 0, 0,	10,	20,	40,	40,	20,	10,	0, 0, 10, 20, 20, 20, 20, 10, 0, -10, 0, 10, 10, 10, 10, 0,	-10, -50, -10,	0,	0,	0,	0, -10, -50}
 
-//idx 0/1 => light/dark squares bishop
-static const int KNB_K_MATE[2][64]= {
-		{-5,-5,-10,-10,-20,-30,-30,-50,
-		  0,0,-5,-5,-10,-20,-30,-30,
-		  5,5,0,0,-5,-10,-10,-20,
-		  10,10,5,5,0,-5,-5,-10,
-		  -10,-5,-5,0,5,5,10,10,
-		  -20,-10,-10,-5,0,0,5,5,
-		  -30,-30,-20,-10,-5,-5,0,0,
-		 -50,-30,-30,-20,-10,-10,-5,-5},
 
-		{-50,-30,-30,-20,-10,-10,-5,-5,
-		-30,-30,-20,-10,-5,-5,0,0,
-		-20,-10,-10,-5,0,0,5,5,
-		-10,-5,-5,0,5,5,10,10,
-		10,10,5,5,0,-5,-5,-10,
-		5,5,0,0,-5,-10,-10,-20,
-		0,0,-5,-5,-10,-20,-30,-30,
-		-5,-5,-10,-10,-20,-30,-30,-50}
-};
+static const int OWN_OPP_IMBALANCE[2][5][5] = {
+{
+//  Opponent's
+//  P   N   B   R   Q
+    { 0},                   // Own pawns
+    { 4,  0},               // Own knights
+    { 1, -5,  0},           // Own bishops
+    { 0, -1,-18,  0},       // Own rooks
+    {-1,-18,-14, -6,  0}    // Own queens
+},
+{
+    { 0},                   // Own pawns
+    { 6,  0},               // Own knights
+    { 4,  0,  0},           // Own bishops
+    { 0,-14,-14,  0},       // Own rooks
+    {24,  7, 15,  9,  0}    // Own queens
+}};
+
+
 
 static const int STORM_MAP[64] = {0,  0,  0,  0,  0,  0,  0,  0,
 								  0,  0,  0,  0,  0,  0,  0,  0,
@@ -43,6 +43,17 @@ static const int STORM_MAP[64] = {0,  0,  0,  0,  0,  0,  0,  0,
 								 30, 50, 60, 50, 50, 60, 50, 30,
 								 0,  0,  0,  0,  0,  0,  0,  0,
 								 0,  0,  0,  0,  0,  0,  0,  0};
+
+
+static const int CANDIDATE_PASSER_MG[2][8] = {
+	{0, -5, 0, 5, 10, 15, 30, 0},
+	{0, 5, 10, 15, 20, 30, 60, 0}
+};
+
+static const int CANDIDATE_PASSER_EG[2][8] = {
+    {0, -5, 5, 10, 15, 20, 40, 0},
+    {0, 10, 20, 30, 40, 50, 80, 0}
+};								
 
 int Evaluation::PIECE_VALUES[14] = {0, 0, PAWN_VAL, -PAWN_VAL, KNIGHT_VAL, -KNIGHT_VAL, BISHOP_VAL,
 					-BISHOP_VAL, ROOK_VAL, -ROOK_VAL, QUEEN_VAL, -QUEEN_VAL, KING_VAL, -KING_VAL};
@@ -287,14 +298,32 @@ void Evaluation::evalPawns(const Board& board, int& mg, int& eg, AttackCache *at
 			//passed
 			U64 frontSpan = BitBoardGen::FRONT_SPAN[side][sq];
 			bool passed = false;
+
+			U64 stoppers = frontSpan & oppPawns;
 			
-			if ((frontSpan & oppPawns) == 0){
+			if (!stoppers){
 				int r = sq >> 3;
 				mg+= s * PASSED_PAWN_BONUS_MG[side][r];
 				eg+= s * PASSED_PAWN_BONUS_EG[side][r];
 				passed = true;
 			}
-			
+			/*
+			// candidate passers			
+			else {
+				U64 threats = oppPawns & BitBoardGen::BITBOARD_PAWN_ATTACKS[side][sq];
+				U64 support = pawnBB & BitBoardGen::BITBOARD_PAWN_ATTACKS[opp][sq];
+				U64 pushThreats = oppPawns & BitBoardGen::BITBOARD_PAWN_ATTACKS[side][sq + up_ahead[side]];
+				U64 pushSupport = pawnBB & BitBoardGen::BITBOARD_PAWN_ATTACKS[opp][sq + up_ahead[side]];
+				U64 leftovers = stoppers ^ threats ^ pushThreats;
+
+				if (!leftovers && BitBoardGen::popCount(pushSupport) >= BitBoardGen::popCount(pushThreats)){
+					int flag = BitBoardGen::popCount(support) >= BitBoardGen::popCount(threats);
+					int r = (side == Board::WHITE) ? sq >> 3 : (7 - (sq >> 3));
+					mg+= s * CANDIDATE_PASSER_MG[flag][r];
+					eg+= s * CANDIDATE_PASSER_EG[flag][r];
+				}
+			}
+			*/
 			bool connected = false;
 
 			//connected
@@ -913,13 +942,14 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *att
 
 		if (side == Board::WHITE){
 			oppPawnAttacks = ((oppPawnBB >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((oppPawnBB >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);
-			blockedLowPawns = board.bitboards[Board::WHITE_PAWN] & ((occup >> 8) | lowRanks[side]);			
+			//blockedLowPawns = board.bitboards[Board::WHITE_PAWN] & ((occup >> 8) | lowRanks[side]);			
 		} else{			
 			oppPawnAttacks = ((oppPawnBB << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((oppPawnBB << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
-			blockedLowPawns = board.bitboards[Board::BLACK_PAWN] & ((occup << 8) | lowRanks[side]);								
+			//blockedLowPawns = board.bitboards[Board::BLACK_PAWN] & ((occup << 8) | lowRanks[side]);								
 		}
 		
-		U64 mobilityArea = ~(blockedLowPawns | board.bitboards[Board::KING | side] | board.bitboards[Board::QUEEN | side] | oppPawnAttacks); 
+		//U64 mobilityArea = ~(blockedLowPawns | board.bitboards[Board::KING | side] | board.bitboards[Board::QUEEN | side] | oppPawnAttacks); 
+		U64 mobilityArea = ~(board.bitboards[side] | oppPawnAttacks) | board.bitboards[Board::KING | opp];
 
 		//knights
 		if (board.bitboards[Board::KNIGHT | side]){
@@ -934,7 +964,7 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *att
 			mg+= s * MOB_B[0][n]/scale;
 			eg+= s * MOB_B[1][n]/scale;
 		}
-		
+		/*
 		//rooks
 		if (board.bitboards[Board::ROOK | side]){
 			n = BitBoardGen::popCount(attCache->rooks[side] & mobilityArea);
@@ -948,7 +978,7 @@ void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *att
 			mg+= s * MOB_Q[0][n]/scale_q;
 			eg+= s * MOB_Q[1][n]/scale_q;
 		}
-		
+		*/
 		s = -1;
 	}
 }
@@ -967,38 +997,6 @@ ending_type Evaluation::get_ending(const Board& board){
 		}
 	}
 	return OTHER_ENDING;
-}
-
-//K vs KBN
-//k7/3bn3/8/4K3/8/8/8/8 b - -
-int Evaluation::evalKBN_K(const Board& board, int side){
-
-	int mg = 0;
-	int eg = 0;
-	int bishop_color = -1;
-	
-	if (board.bitboards[Board::WHITE_BISHOP]){
-		U64 bishop = board.bitboards[Board::WHITE_BISHOP];
-		bishop_color = BitBoardGen::COLOR_OF_SQ[numberOfTrailingZeros(bishop)];
-	} else {
-		U64 bishop = board.bitboards[Board::BLACK_BISHOP];
-		bishop_color = BitBoardGen::COLOR_OF_SQ[numberOfTrailingZeros(bishop)];
-	}
-	
-	assert(bishop_color > 0);
-	int w_ks = numberOfTrailingZeros(board.bitboards[Board::WHITE_KING]);
-	int b_ks = numberOfTrailingZeros(board.bitboards[Board::BLACK_KING]);
-	
-	materialBalance(board, mg, eg);
-	mg+= KNB_K_MATE[bishop_color][w_ks];
-	eg+= KNB_K_MATE[bishop_color][w_ks];
-	mg-= KNB_K_MATE[bishop_color][b_ks];
-	eg-= KNB_K_MATE[bishop_color][b_ks];
-	
-	int phase = get_phase(board);
-	int eval = ((mg * (256 - phase)) + (eg * phase))/256;
-	
-	return side == Board::WHITE ? eval : -eval;
 }
 
 void Evaluation::outposts(const Board& board, int&mg, int&eg){
@@ -1093,7 +1091,7 @@ void Evaluation::threats(const Board& board, int& mg, int& eg, AttackCache *attC
 		pushThreat|= ~occup & (side == Board::WHITE ? ((pushThreat & ~attackByPawns & r3) << 8) : ((pushThreat & ~attackByPawns & r3) >> 8));
 		pushThreat&= ~attackByPawns & (attCache->allAttacks(side) | ~attCache->allAttacks(opp));
 
-		//attacks bu push
+		//attacks by push
 		if (side == Board::WHITE){
 			pushThreat = ((pushThreat << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((pushThreat << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
 		} else{
@@ -1103,9 +1101,9 @@ void Evaluation::threats(const Board& board, int& mg, int& eg, AttackCache *attC
 		pushThreat&= (enemy & ~pawnAttacks[side]);		
 
 		//poorly supported pawns
-		// count = BitBoardGen::popCount(pawns & ~attackByPawns & poorlyDefended);
-		// mg+= s * count * (-15);
-		// eg+= s * count * (-30);
+		count = BitBoardGen::popCount(pawns & ~attackByPawns & poorlyDefended);
+		mg+= s * count * (-15);
+		eg+= s * count * (-30);
 
 		//threat against our minors		 
 		count = BitBoardGen::popCount((knights | bishops) & attackByPawns);
@@ -1118,9 +1116,9 @@ void Evaluation::threats(const Board& board, int& mg, int& eg, AttackCache *attC
 		eg+= s * count * (-40);
 
 		//penalty for all major threats against poorly supported minors
-		// count = BitBoardGen::popCount((knights | bishops) & poorlyDefended & attackByMajors);
-		// mg+= s * count * (-15);
-		// eg+= s * count * (-30);
+		count = BitBoardGen::popCount((knights | bishops) & poorlyDefended & attackByMajors);
+		mg+= s * count * (-15);
+		eg+= s * count * (-30);
 
 		 //penalty for pawn and minor threats against our rooks
     	count = BitBoardGen::popCount(rooks & (attackByPawns | attackByMinors));
@@ -1146,19 +1144,42 @@ void Evaluation::threats(const Board& board, int& mg, int& eg, AttackCache *attC
 	}
 }
 
+static int pieceCount(const Board& board, int side, int piece){
+	return BitBoardGen::popCount(board.bitboards[piece | side]);
+}
+
+void Evaluation::imbalance(const Board& board, int& mg, int& eg){
+	//Piece constants
+	//pawn 2
+	//knight 4
+	//bishop 6
+	//rook 8
+	//queen 10
+
+	int imbalanceValue[2] = {0, 0};
+
+	for (int i = Board::KNIGHT; i <= Board::QUEEN; i+= 2){
+		//convert index
+		int ownID = (i - 2)/2;
+		for (int j = Board::PAWN; j < i; j+= 2){
+			//convert index
+			int oppID = (j - 2)/2;            
+            imbalanceValue[0]+= 2*OWN_OPP_IMBALANCE[0][ownID][oppID] * pieceCount(board, Board::WHITE, i) * pieceCount(board, Board::BLACK, j);
+            imbalanceValue[1]+= 2*OWN_OPP_IMBALANCE[1][ownID][oppID] * pieceCount(board, Board::WHITE, i) * pieceCount(board, Board::BLACK, j);
+            imbalanceValue[0]-= 2*OWN_OPP_IMBALANCE[0][ownID][oppID] * pieceCount(board, Board::BLACK, i) * pieceCount(board, Board::WHITE, j);
+            imbalanceValue[1]-= 2*OWN_OPP_IMBALANCE[1][ownID][oppID] * pieceCount(board, Board::BLACK, i) * pieceCount(board, Board::WHITE, j);
+        }
+    }
+    mg+= imbalanceValue[0];
+    eg+= imbalanceValue[1];
+}
+
 
 static AttackCache attCache;
 int Evaluation::evaluate(const Board& board, int side){
 
-	/* TODO
-	if (materialDraw())
-		if (pawns){ return scale eval }
-	*/
 	if (materialDraw(board))
 		return 0;
-	/*else if (get_ending(board) == KNB_K)
-		return evalKBN_K(board, side);
-	*/
 	
 	int mg = 0;
 	int eg = 0;
@@ -1178,6 +1199,7 @@ int Evaluation::evaluate(const Board& board, int side){
 	outposts(board, mg, eg);
 	//mobility(board, mg, eg, &attCache);
 	threats(board, mg, eg, &attCache);
+	//imbalance(board, mg, eg);
 	
 	int phase = get_phase(board);
 	int eval = ((mg * (256 - phase)) + (eg * phase))/256;
