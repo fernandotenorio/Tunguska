@@ -2,10 +2,14 @@
 Tunguska is a UCI-compliant chess engine written in C++11.
 
 ## Compiling
+# On linux
 >g++ -std=c++11 -O2 -DNDEBUG *.cpp -o tunguska_1_1
 
+# On Windows
+>cl /EHsc /O2 /Oi /GL /DNDEBUG /std=c++11 /Fe:tunguska_1_1_ns.exe *.cpp /link /LTCG && del *.obj
+
 ## Engine Strenght
-At 40/4 it plays around 2630-2650 ELO.
+2450 at CCRL.
 
 ## Special thanks
 - The Chess Programming Wiki:
