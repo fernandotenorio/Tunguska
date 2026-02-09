@@ -89,16 +89,12 @@ class BitBoardGen{
 		static void initAll();
 
 		static int popCount(U64 bb){
-			/*
-			int cnt = 0;
-			while(bb){
-				cnt++;
-				bb&= bb-1;
-			}
-			return cnt;
-			*/
+		#ifdef _MSC_VER
+			return (int)__popcnt64(bb);
+		#else
 			return __builtin_popcountll(bb);
-		}	
+		#endif
+		}		
 };
 static void emptyBitString(char b[8][8]);
 static U64 fromBit(char *p);

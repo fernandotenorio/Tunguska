@@ -4,6 +4,12 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#pragma intrinsic(_BitScanForward64)
+#pragma intrinsic(_BitScanReverse64)
+#endif
+
 typedef uint64_t U64;
 typedef uint32_t U32;
 const U64 debruijn64 = U64(0x03f79d71b4cb0a89);
@@ -33,22 +39,24 @@ const int index64_lead[64] = {
 //inline or duplicated symbol error
 inline int numberOfTrailingZeros(U64 bb){
    assert (bb != 0);
-   //return index64_trail[((bb & -bb) * debruijn64) >> 58];
+#ifdef _MSC_VER
+   unsigned long index;
+   _BitScanForward64(&index, bb);
+   return index;
+#else
   return __builtin_ctzll(bb);
+#endif
 }
 
 inline int numberOfLeadingZeros(U64 bb){
    assert (bb != 0);
-   /*
-   bb |= bb >> 1; 
-   bb |= bb >> 2;
-   bb |= bb >> 4;
-   bb |= bb >> 8;
-   bb |= bb >> 16;
-   bb |= bb >> 32;
-  return index64_lead[(bb * debruijn64) >> 58];
-  */
-  return 63 - __builtin_clzll(bb);
+#ifdef _MSC_VER
+   unsigned long index;
+   _BitScanReverse64(&index, bb);
+   return index; // _BitScanReverse64 returns the index of MSB, which is equivalent to 63 - clz
+#else
+   return 63 - __builtin_clzll(bb);
+#endif
 }
 
 #endif
