@@ -13,13 +13,9 @@
 const std::string UCI::ENGINE_NAME = "Tunguska 1.0";
 const std::string UCI::ENGINE_AUTHOR = "Fernando Tenorio";
 
-UCI::UCI(){
-	hashTable = new HashTable();
-}
+UCI::UCI(){}
 
-UCI::~UCI(){
-	delete hashTable;
-}
+UCI::~UCI(){}
 
 void UCI::uciLoop(){
 	std::string input;
@@ -31,23 +27,25 @@ void UCI::uciLoop(){
 		if ("uci" == input){
 			inputUCI();
 		} else if(startsWith(input, "setoption")){
-			//ignore
+			inputSetOption(input);
 		} else if ("isready" == input){
 			inputIsReady();
 		} else if ("ucinewgame" == input){
 			inputUCINewGame();
-		} else if (startsWith(input, "position")){			
+		} else if (startsWith(input, "position")){
 			inputPosition(input);
 		}
 		else if (startsWith(input, "go")){
 			inputGo(input);
 		}
 		else if ("quit" == input){
-			search.stop();
+			pool.stopSearch();
+			pool.waitForSearch();
 			break;
 		}
 		else if ("stop" == input){
-			search.stop();
+			pool.stopSearch();
+			pool.waitForSearch();
 		}
 		else if ("perft" == input){
 			Perft::runAll("perft.txt");
@@ -57,6 +55,9 @@ void UCI::uciLoop(){
 		}
 		else if ("bench" == input){
 			TestSuite::runFile("positions/STS1-STS15_LAN.EPD", 50);
+		}
+		else if (startsWith(input, "benchmt")){
+			TestSuite::runFile("positions/STS1-STS15_LAN.EPD", 50, pool);
 		}
 	}
 }
@@ -126,14 +127,8 @@ void UCI::inputGo(std::string input){
 	
 	printf("time: %d start: %llu stop: %llu depth: %d timeset: %d\n",
 			time, info.startTime, info.stopTime, info.depth, info.timeSet);
-			
-	search.board = board;
-	search.info = info;
 
-	std::thread t([this]{
-		search.search(true);
-	});
-	t.detach();
+	pool.startSearch(board, info);
 }
 
 void UCI::inputUCINewGame(){
@@ -147,8 +142,27 @@ void UCI::inputIsReady(){
 void UCI::inputUCI(){
 	std::cout << "id name " << ENGINE_NAME << std::endl;
 	std::cout << "id author " << ENGINE_AUTHOR << std::endl;
-	//options here
+	std::cout << "option name Threads type spin default 1 min 1 max 64" << std::endl;
+	std::cout << "option name Hash type spin default 256 min 1 max 4096" << std::endl;
 	std::cout << "uciok" << std::endl;
+}
+
+void UCI::inputSetOption(std::string input){
+	// Format: setoption name <name> value <value>
+	if (stringContains(input, "Threads") || stringContains(input, "threads")){
+		int val = parseField(input, "value");
+		if (val > 0){
+			pool.setThreadCount(val);
+			std::cout << "info string Threads set to " << val << std::endl;
+		}
+	}
+	else if (stringContains(input, "Hash") || stringContains(input, "hash")){
+		int val = parseField(input, "value");
+		if (val > 0){
+			delete pool.sharedHash;
+			pool.sharedHash = new HashTable(val);
+		}
+	}
 }
 
 void UCI::inputPosition(std::string str){
@@ -164,7 +178,7 @@ void UCI::inputPosition(std::string str){
 	}
 	
 	board = Board::fromFEN(FEN);
-	board.setHashTable(hashTable);
+	board.setHashTable(pool.sharedHash);
 
 	if (stringContains(input, "moves")){
 		input = input.substr(input.find("moves") + 6);

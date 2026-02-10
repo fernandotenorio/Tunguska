@@ -5,6 +5,7 @@
 #include "Evaluation.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include "HashTable.h"
 
 
@@ -20,8 +21,6 @@ int Search::VICTIM_SCORES[14] = {
 
 int Search::MVV_VLA_SCORES[14][14];
 int Search::LMR_TABLE[64][64];
-int Search::counterMoves[14][64];
-int Search::moveAtPly[Board::MAX_DEPTH];
 
 void Search::initHeuristics(){
 	for (int v = 0; v < 14; v++){
@@ -37,15 +36,24 @@ void Search::initHeuristics(){
 	}
 }
 
-Search::Search(){}
+Search::Search() : moveScore(Move::MAX_LEGAL_MOVES), sharedStop(nullptr),
+	threadId(0), completedDepth(0), rootBestMove(0), rootBestScore(0) {
+	memset(counterMoves, 0, sizeof(counterMoves));
+	memset(moveAtPly, 0, sizeof(moveAtPly));
+}
 
-Search::Search(Board b, SearchInfo i){
+Search::Search(Board b, SearchInfo i) : moveScore(Move::MAX_LEGAL_MOVES), sharedStop(nullptr),
+	threadId(0), completedDepth(0), rootBestMove(0), rootBestScore(0) {
 	board = b;
 	info = i;
+	memset(counterMoves, 0, sizeof(counterMoves));
+	memset(moveAtPly, 0, sizeof(moveAtPly));
 }
 
 void Search::stop(){
 	info.stopped = true;
+	if (sharedStop)
+		sharedStop->store(true, std::memory_order_relaxed);
 }
 
 U64 Search::getTime(){
@@ -54,12 +62,18 @@ U64 Search::getTime(){
 }
 
 void Search::checkUp(SearchInfo& info){
+	if (sharedStop && sharedStop->load(std::memory_order_relaxed)){
+		info.stopped = true;
+		return;
+	}
 	if (info.timeSet && (Search::getTime() > info.stopTime)){
 		info.stopped = true;
+		// Signal other threads to stop too
+		if (sharedStop)
+			sharedStop->store(true, std::memory_order_relaxed);
 	}
 }
 
-std::vector<MoveScore> Search::moveScore(Move::MAX_LEGAL_MOVES);
 void Search::orderMoves(Board& board, MoveList& moves, int pvMove, int counterMove){
 
 	int side = board.state.currentPlayer;
@@ -151,9 +165,11 @@ void Search::clearSearch(){
 		}
 	}
 
-	board.hashTable->overWrite = 0;
-	board.hashTable->hit = 0;	
-	board.hashTable->cut = 0;	
+	if (threadId == 0) {
+		board.hashTable->overWrite = 0;
+		board.hashTable->hit = 0;
+		board.hashTable->cut = 0;
+	}
 	board.ply = 0;
 	
 	info.stopped = false;
@@ -166,12 +182,14 @@ int Search::search(bool verbose){
 	int bestMove = Move::NO_MOVE;
 	int bestScore = 0;
 	int pvMoves = 0;
-	
+
 	clearSearch();
+	completedDepth = 0;
+	rootBestMove = Move::NO_MOVE;
+	rootBestScore = 0;
 
 	//iterative deepening
 	for (int currentDepth = 1; currentDepth <= info.depth; currentDepth++){
-		//bestScore = alphaBeta(-INFINITE, INFINITE, currentDepth, true);
 		bestScore = aspirationWindow(&board, currentDepth, bestScore);
 
 		//check stop
@@ -181,24 +199,23 @@ int Search::search(bool verbose){
 
 		pvMoves = HashTable::getPVLine(currentDepth, board);
 		bestMove = board.pvArray[0];
-		
+
+		// Track results for thread voting
+		completedDepth = currentDepth;
+		rootBestMove = bestMove;
+		rootBestScore = bestScore;
+
 		if (verbose){
 			printf("info score cp %d depth %d nodes %llu time %llu ",
 					bestScore, currentDepth, info.nodes, Search::getTime() - info.startTime);
 			printf("pv");
-			
+
 			for (int i = 0; i < pvMoves; i++){
 				int m = board.pvArray[i];
 				std::cout << " " <<  Move::toLongNotation(m);
 			}
 			printf("\n");
 		}
-		
-		
-		// printf("Hits: %d  Overwrite: %d  NewWrite: %d  Cut: %d\nOrdering: %.2f  NullCut:%d\n",
-		// 	board.hashTable->hit, board.hashTable->overWrite, board.hashTable->newWrite, board.hashTable->cut,
-		// 	(info.fhf/info.fh)*100, info.nullCut);
-		
 	}
 
 	if (verbose)
@@ -208,7 +225,8 @@ int Search::search(bool verbose){
 
 
 int Search::aspirationWindow(Board* board, int depth, int score){
-	int delta = 15;
+	// Vary aspiration window by threadId for search diversity
+	int delta = 15 + (threadId % 4) * 3;
     int alpha = std::max(-MATE_SCORE, score - delta);
     int beta = std::min(MATE_SCORE, score + delta);
 

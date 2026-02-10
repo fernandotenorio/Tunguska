@@ -6,8 +6,8 @@
 
 int MoveGen::epCaptDiff[2] = {-8, 8};
 
-static U64 bb_bk[14];
 bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pinned){
+	U64 bb_bk[14];
 	
 	if (Move::isCastle(move)){
 		assert(!atCheck);
