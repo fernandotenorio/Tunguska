@@ -926,7 +926,64 @@ Date       | Change                        | Bench Delta | New Score
 2026-02-09 | [LOW-5] Bad capture demotion   | -10 REVERT  | (693)
            | SEE overhead too expensive    |             |
 -----------+-------------------------------+-------------+----------
-FINAL: 701-703/1500 (46.7-46.9%) from baseline 673/1500 (44.9%)
-Total improvement: ~+30 points (+2.0%)
+2026-02-09 | [MED-3] Countermove heuristic  | +0 to +1    | 701-703
+           | counterMoves[14][64], 750000  |             |
+-----------+-------------------------------+-------------+----------
+PHASE 2: TUNING (from 701 baseline)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | RFP margin 100*depth          | +4          | 705
+           | (was 90*depth)                |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | Remove NMP eval-based R adj   | +2          | 706-710
+           | Simpler R = 2+depth/6 only    |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | Widen razoring margins        | +1-2        | 707-710
+           | 350+300*(d-1), was 300+250    |             |
+-----------+-------------------------------+-------------+----------
+ALSO ATTEMPTED AND REVERTED (no benefit for STS):
+  - History-based LMR (hist/5000,8000,16000): -2 to -3
+  - Aspiration fix (no beta narrowing on fail-low): -3
+  - Aspiration depth<=4: -21
+  - LMR depth>4: -20
+  - LMR legal>4: -31
+  - LMR divisor /2.95: +0, /3.05: -8
+  - Null move R=3+d/6: -30, R=2+d/8: -13
+  - Null move depth>=4: -17
+  - Null move verification (d>=10,12): +0 (neutral)
+  - Singular extensions: +0 (neutral, too complex)
+  - Fail-soft beta cutoff: -6
+  - Pawn-on-7th extension: +0 (neutral)
+  - Recapture extension: -215 (catastrophic tree explosion)
+  - QS TT move ordering: -7
+  - QS delta 150: -8, 300: -3
+  - History on beta cutoffs: -32 (saturation)
+  - History aging: N/A (already reset per position)
+  - Hash aging (age-aware replacement): -3 to -8
+  - Hash depth+1: -6, depth+3: -4, depth+4: -22
+  - RFP margin 110*d: -2, RFP depth<=6: -2
+  - Razoring 400+350*(d-1): -6
+  - IIR depth>=5: -6
+  - Cut-node LMR: -17
+  - PV-aware LMR: -28
+  - PST ordering tiebreaker: -33
+  - Futility various margins: -3 to +0
+  - Countermove excluded from LMR: -11
+  - Ply-2 killers: -6
+  - Time check 4096: (killed by team, inconclusive)
+-----------+-------------------------------+-------------+----------
+FINAL: 705-710/1500 (47.0-47.3%) from baseline 673/1500 (44.9%)
+Average confirmed: ~707/1500 (47.1%)
+Total improvement: ~+34 points (+2.2%)
+
+KEY INSIGHT: STS at 50ms rewards LESS aggressive pruning. Every technique
+that prunes more quiet moves (LMP, aggressive LMR, extended futility,
+aggressive null move, cut-node LMR) hurts STS. Widening margins (less
+pruning) and removing eval-based aggressiveness helps.
+
+REMAINING UNTRIED:
+  - Hash table packing (16 bytes per entry, doubles capacity)
+  - Continuation history (complex, may not help STS)
+  - Capture history (moderate complexity)
+  - Move ordering micro-optimization (selection sort vs std::sort)
 
 ================================================================================
