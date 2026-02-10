@@ -4,6 +4,8 @@
 #include "Move.h"
 #include "Evaluation.h"
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include "HashTable.h"
 
 
@@ -11,31 +13,47 @@ const int Search::INFINITE = 30000;
 static const int MATE_SCORE = 29999;
 
 int Search::VICTIM_SCORES[14] = {
-		0, 0, 
+		0, 0,
 		Evaluation::PAWN_VAL, Evaluation::PAWN_VAL, Evaluation::KNIGHT_VAL, Evaluation::KNIGHT_VAL,
 		Evaluation::BISHOP_VAL, Evaluation::BISHOP_VAL, Evaluation::ROOK_VAL, Evaluation::ROOK_VAL,
 		Evaluation::QUEEN_VAL, Evaluation::QUEEN_VAL, Evaluation::KING_VAL, Evaluation::KING_VAL
 		};
 
 int Search::MVV_VLA_SCORES[14][14];
-		
+int Search::LMR_TABLE[64][64];
+
 void Search::initHeuristics(){
 	for (int v = 0; v < 14; v++){
 		for (int a = 0; a < 14; a++){
 			MVV_VLA_SCORES[v][a] = VICTIM_SCORES[v] + 6 - (VICTIM_SCORES[a]/100);
 		}
 	}
+	// Initialize LMR reduction table with logarithmic formula
+	for (int d = 1; d < 64; d++){
+		for (int m = 1; m < 64; m++){
+			LMR_TABLE[d][m] = (int)(0.5 + log(d) * log(m) / 3.00);
+		}
+	}
 }
 
-Search::Search(){}
+Search::Search() : moveScore(Move::MAX_LEGAL_MOVES), sharedStop(nullptr),
+	threadId(0), completedDepth(0), rootBestMove(0), rootBestScore(0) {
+	memset(counterMoves, 0, sizeof(counterMoves));
+	memset(moveAtPly, 0, sizeof(moveAtPly));
+}
 
-Search::Search(Board b, SearchInfo i){
+Search::Search(Board b, SearchInfo i) : moveScore(Move::MAX_LEGAL_MOVES), sharedStop(nullptr),
+	threadId(0), completedDepth(0), rootBestMove(0), rootBestScore(0) {
 	board = b;
 	info = i;
+	memset(counterMoves, 0, sizeof(counterMoves));
+	memset(moveAtPly, 0, sizeof(moveAtPly));
 }
 
 void Search::stop(){
 	info.stopped = true;
+	if (sharedStop)
+		sharedStop->store(true, std::memory_order_relaxed);
 }
 
 U64 Search::getTime(){
@@ -44,13 +62,19 @@ U64 Search::getTime(){
 }
 
 void Search::checkUp(SearchInfo& info){
+	if (sharedStop && sharedStop->load(std::memory_order_relaxed)){
+		info.stopped = true;
+		return;
+	}
 	if (info.timeSet && (Search::getTime() > info.stopTime)){
 		info.stopped = true;
+		// Signal other threads to stop too
+		if (sharedStop)
+			sharedStop->store(true, std::memory_order_relaxed);
 	}
 }
 
-std::vector<MoveScore> Search::moveScore(Move::MAX_LEGAL_MOVES);
-void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
+void Search::orderMoves(Board& board, MoveList& moves, int pvMove, int counterMove){
 
 	int side = board.state.currentPlayer;
 
@@ -72,6 +96,8 @@ void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
 				moveScore[i] = MoveScore(mv, KILLER_BONUS_0);
 			} else if (board.searchKillers[1][board.ply] == mv){
 				moveScore[i] = MoveScore(mv, KILLER_BONUS_1);
+			}else if (counterMove && mv == counterMove){
+				moveScore[i] = MoveScore(mv, COUNTER_BONUS);
 			}else{
 				int piece = board.board[Move::from(mv)];
 				int to = Move::to(mv);
@@ -132,9 +158,18 @@ void Search::clearSearch(){
 		}
 	}
 
-	board.hashTable->overWrite = 0;
-	board.hashTable->hit = 0;	
-	board.hashTable->cut = 0;	
+	//clear countermoves
+	for (int i = 0; i < 14; i++){
+		for (int j = 0; j < 64; j++){
+			counterMoves[i][j] = 0;
+		}
+	}
+
+	if (threadId == 0) {
+		board.hashTable->overWrite = 0;
+		board.hashTable->hit = 0;
+		board.hashTable->cut = 0;
+	}
 	board.ply = 0;
 	
 	info.stopped = false;
@@ -147,12 +182,14 @@ int Search::search(bool verbose){
 	int bestMove = Move::NO_MOVE;
 	int bestScore = 0;
 	int pvMoves = 0;
-	
+
 	clearSearch();
+	completedDepth = 0;
+	rootBestMove = Move::NO_MOVE;
+	rootBestScore = 0;
 
 	//iterative deepening
 	for (int currentDepth = 1; currentDepth <= info.depth; currentDepth++){
-		//bestScore = alphaBeta(-INFINITE, INFINITE, currentDepth, true);
 		bestScore = aspirationWindow(&board, currentDepth, bestScore);
 
 		//check stop
@@ -162,24 +199,41 @@ int Search::search(bool verbose){
 
 		pvMoves = HashTable::getPVLine(currentDepth, board);
 		bestMove = board.pvArray[0];
-		
+
+		// Track results for thread voting
+		completedDepth = currentDepth;
+		rootBestMove = bestMove;
+		rootBestScore = bestScore;
+
 		if (verbose){
 			printf("info score cp %d depth %d nodes %llu time %llu ",
 					bestScore, currentDepth, info.nodes, Search::getTime() - info.startTime);
 			printf("pv");
-			
+
 			for (int i = 0; i < pvMoves; i++){
 				int m = board.pvArray[i];
 				std::cout << " " <<  Move::toLongNotation(m);
 			}
 			printf("\n");
 		}
-		
-		
-		// printf("Hits: %d  Overwrite: %d  NewWrite: %d  Cut: %d\nOrdering: %.2f  NullCut:%d\n",
-		// 	board.hashTable->hit, board.hashTable->overWrite, board.hashTable->newWrite, board.hashTable->cut,
-		// 	(info.fhf/info.fh)*100, info.nullCut);
-		
+	}
+
+	// Safety: if no move found (e.g., search stopped during depth 1), pick first legal move
+	if (bestMove == Move::NO_MOVE) {
+		int side = board.state.currentPlayer;
+		int opp = side ^ 1;
+		bool atCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], opp);
+		MoveList moves;
+		MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
+		for (int i = 0; i < moves.size(); i++) {
+			BoardState undo = board.makeMove(moves.get(i));
+			if (undo.valid) {
+				board.undoMove(moves.get(i), undo);
+				bestMove = moves.get(i);
+				rootBestMove = bestMove;
+				break;
+			}
+		}
 	}
 
 	if (verbose)
@@ -189,7 +243,8 @@ int Search::search(bool verbose){
 
 
 int Search::aspirationWindow(Board* board, int depth, int score){
-	int delta = 15;
+	// Vary aspiration window by threadId for search diversity
+	int delta = 15 + (threadId % 4) * 3;
     int alpha = std::max(-MATE_SCORE, score - delta);
     int beta = std::min(MATE_SCORE, score + delta);
 
@@ -218,6 +273,7 @@ int Search::aspirationWindow(Board* board, int depth, int score){
         }
 
         if(f >= beta) {
+            alpha = (alpha + beta)/2;
             beta = std::min(MATE_SCORE, beta + delta);
             evalType = lowerbound;
         }
@@ -251,20 +307,20 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 
 
 	//Mate Distance Pruning
-    // int mate_val = MATE_SCORE - board.ply;
-    // if(mate_val < beta) {
-    //     beta = mate_val;
-    //     if(alpha >= mate_val) {        	
-    //         return mate_val;
-    //     }
-    // }
-    // mate_val = -MATE_SCORE + board.ply;
-    // if(mate_val > alpha) {
-    //     alpha = mate_val;
-    //     if(beta <= mate_val) {
-    //         return mate_val;
-    //     }
-    // }
+    int mate_val = MATE_SCORE - board.ply;
+    if(mate_val < beta) {
+        beta = mate_val;
+        if(alpha >= mate_val) {
+            return mate_val;
+        }
+    }
+    mate_val = -MATE_SCORE + board.ply;
+    if(mate_val > alpha) {
+        alpha = mate_val;
+        if(beta <= mate_val) {
+            return mate_val;
+        }
+    }
 
 	//Check extension
 	int side = board.state.currentPlayer;
@@ -290,17 +346,22 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return score;
 	}
 
-	//Eval pruning 
+	// Internal Iterative Reduction
+	if (depth >= 4 && pvMove == Move::NO_MOVE && !atCheck) {
+		depth--;
+	}
+
+	//Reverse Futility Pruning
 	int static_eval = 0;
-	bool static_set = false;	
+	bool static_set = false;
 
-	if (!pvMove && depth < 3 && !atCheck && abs(beta - 1) > -INFINITE + 100){
-		static_eval =  Evaluation::evaluate(board, side);
+	if (!atCheck && depth <= 5 && abs(beta) < ISMATE){
+		static_eval = Evaluation::evaluate(board, side);
 		static_set = true;
-		int eval_margin = 120 * depth;
+		int rfpMargin = 100 * depth;
 
-		if (static_eval - eval_margin >= beta)
-			return static_eval - eval_margin;			
+		if (static_eval - rfpMargin >= beta)
+			return static_eval - rfpMargin;
 	}
 
 	//null move pruning
@@ -324,39 +385,24 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 	//null move pruning
 
-	/*
-	int ReverseFutilityStep = 90;
-	//Reverse futility pruning
-    if(!pvMove && !atCheck && depth <= 7 && static_eval - ReverseFutilityStep * depth > beta) {
-        return static_eval;
-    }
-    */
+	//Reverse futility pruning (now implemented above)
 
 	//Razoring pruning
-	/*
-	//if (pvMove == Move::NO_MOVE && depth <= 4 && !atCheck && doNull){
-	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck && doNull){
-		static_eval = static_set ? static_eval : Evaluation::evaluate(board, side);
-		static_set = true;
-
-		//ou
-		int RazorMargin = 300;		
-		if (static_eval + RazorMargin * depth < alpha){
-			return Quiescence(alpha, beta);			
+	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck){
+		if (!static_set) {
+			static_eval = Evaluation::evaluate(board, side);
+			static_set = true;
 		}
-		
-		//ou
-		int threshold = alpha - 300 - (depth - 1) * 60;
-		if (static_eval < threshold){
+		int razorMargin = 350 + 300 * (depth - 1);
+		if (static_eval + razorMargin < alpha) {
+			if (depth == 1) {
+				return Quiescence(alpha, beta);
+			}
 			int val = Quiescence(alpha, beta);
-
-			if (val < threshold)
-				return alpha;
+			if (val < alpha)
+				return val;
 		}
 	}
-	//end of Razoring pruning
-	*/
-
 	//Futility pruning
 	bool f_prune = false;
 	if (depth <= 3 && !atCheck && abs(alpha) < 9000){
@@ -370,7 +416,15 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	//Move list
 	MoveList moves;
 	MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
-	orderMoves(board, moves, pvMove);
+
+	// Get countermove for the previous move
+	int cm = Move::NO_MOVE;
+	if (board.ply > 0) {
+		int pm = moveAtPly[board.ply - 1];
+		int prevPiece = board.board[Move::to(pm)];
+		cm = counterMoves[prevPiece][Move::to(pm)];
+	}
+	orderMoves(board, moves, pvMove, cm);
 
 	int legal = 0;
 	int oldAlpha = alpha;
@@ -380,7 +434,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 
 	//pinned
 	//U64 pinned = MoveGen::pinnedBB(&board, side, kingSQ);
-	
+
 	//Loop through moves
 	for (int i = 0; i < moves.size(); i++){
 		/*
@@ -389,7 +443,10 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		*/		
 		BoardState undo = board.makeMove(moves.get(i));
 		if (!undo.valid)
-			continue;		
+			continue;
+
+		// Track move at ply for countermove heuristic
+		moveAtPly[board.ply - 1] = moves.get(i);
 
 		legal++;
 		bool oppAtCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, side);
@@ -398,33 +455,43 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		int mv_to = Move::to(tmp_mv);
 
 		//Futility pruning
-		if (f_prune && legal > 0 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
+		if (f_prune && legal > 1 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
 			board.undoMove(tmp_mv, undo);
 			continue;
 		}
 
 		bool doReduce = false;
+		bool doPVS = (legal > 1) && (pvMove != Move::NO_MOVE);
 
-		/* LMR TODO FIX */
+		// LMR + PVS
 		if (depth > 3 && legal > 3 && (!atCheck) &&
-			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0  
+			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0
 			&& (mv_from != Move::from(board.searchKillers[0][board.ply]) || mv_to != Move::to(board.searchKillers[0][board.ply]))
 			&& (mv_from != Move::from(board.searchKillers[1][board.ply]) || mv_to != Move::to(board.searchKillers[1][board.ply]))
 			&& !oppAtCheck){
-				//int reduce = legal > 6 ? int(depth/3) : 2;
-				int reduce = legal > 6 ? 2 : 1;
+				int reduce = LMR_TABLE[std::min(depth, 63)][std::min(legal, 63)];
+				reduce = std::max(reduce, 1);
+				reduce = std::min(reduce, depth - 2);
 				doReduce = true;
-				score = -alphaBeta(-beta, -alpha, depth - 1 - reduce, true);
+				score = -alphaBeta(-alpha - 1, -alpha, depth - 1 - reduce, true);
 		}
-		else {//no LMR			
+		else if (doPVS) {
+			// PVS: zero-window for non-first moves when we have PV move
+			score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+		}
+		else {
+			// Full window search
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
 
-		//re-search
-		if (score > alpha && doReduce){
+		// LMR fail-high: re-search at full depth with zero-window
+		if (score > alpha && doReduce) {
+			score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+		}
+		// Full-window re-search if ZW failed high within (alpha, beta)
+		if (score > alpha && score < beta && (doReduce || doPVS)){
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
-		/* LMR TODO FIX */
 
 		board.undoMove(moves.get(i), undo);
 
@@ -454,8 +521,15 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 					if (capt == 0 && !ep){
 						board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
 						board.searchKillers[0][board.ply] = moves.get(i);
-					}					
-					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);					
+
+						// Countermove: store this cutoff move as counter to parent's move
+						if (board.ply > 0) {
+							int pm = moveAtPly[board.ply - 1];
+							int prevPiece = board.board[Move::to(pm)];
+							counterMoves[prevPiece][Move::to(pm)] = moves.get(i);
+						}
+					}
+					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
 					return beta;
 				}
 				alpha = score;
@@ -486,11 +560,11 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	//Hash table
 	if (alpha != oldAlpha){
 		HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
-	} else{		
-		HashTable::storeHashEntry(board, bestMove, alpha, HFALPHA, depth);
+	} else{
+		HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
 	}
 
-	return alpha;
+	return bestScore;
 }
 
 int Search::Quiescence(int alpha, int beta){
@@ -512,14 +586,14 @@ int Search::Quiescence(int alpha, int beta){
 	int ks = board.kingSQ[side];
 	bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
 
-	if (board.ply > Board::MAX_DEPTH - 1){		
+	if (board.ply > Board::MAX_DEPTH - 1){
 		return Evaluation::evaluate(board, side);
 	}
 
 	int score = Evaluation::evaluate(board, side);
 	int stand_pat = score;
 
-	if (!atCheck){		
+	if (!atCheck){
 		if (score >= beta){
 			return beta;
 		}
@@ -550,9 +624,14 @@ int Search::Quiescence(int alpha, int beta){
 	int legal = 0;
 	int oldAlpha = alpha;
 	score = -INFINITE;
-	
+
+	// Get previous move's target square for recapture detection
+	int prevTo = -1;
+	if (board.ply > 0)
+		prevTo = Move::to(moveAtPly[board.ply - 1]);
+
 	//U64 pinned = MoveGen::pinnedBB(&board, side, ks);
-	
+
 	//Loop through captures
 	for (int i = 0; i < moves.size(); i++){
 
@@ -563,11 +642,13 @@ int Search::Quiescence(int alpha, int beta){
 
 		//legal++;
 
-		//Delta cutoff (disable if endgame)
+		//Delta cutoff (disable if endgame) - exempt recaptures
 		int capt = Move::captured(moves.get(i));
 		int promo = Move::promoteTo(moves.get(i));
+		int moveTo = Move::to(moves.get(i));
 
-		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&			
+		if (moveTo != prevTo &&
+			(stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&
 			(board.material[opp] - Evaluation::KING_VAL - abs(Evaluation::PIECE_VALUES[capt]) > ENDGAME_MAT) && (promo == 0)) {
 			continue;
 		}
@@ -582,6 +663,7 @@ int Search::Quiescence(int alpha, int beta){
 		if (!undo.valid)
 			continue;
 
+		moveAtPly[board.ply - 1] = moves.get(i);
 		legal++;
 
 		score = -Quiescence(-beta, -alpha);

@@ -7,15 +7,28 @@
 
 enum {HFNONE, HFALPHA, HFBETA, HFEXACT};
 
+// Lock-free hash entry using XOR verification trick.
+// Two 8-byte words — each is atomically read/written on x86-64.
+// On store: data = pack(move, score, depth, flags); keyXorData = zKey ^ data
+// On probe: recover zKey = keyXorData ^ data; verify against board zKey
+// Torn reads (half from one write, half from another) fail verification → treated as miss.
 class HashEntry{
 	public:
-		U64 zKey;
-		int move;
-		int score;
-		int depth;
-		int flags;
+		U64 keyXorData;  // zKey ^ data
+		U64 data;        // packed: move(32) | score_u16(16) | depth(8) | flags(8)
 
-		HashEntry():zKey((U64)0), move(0), score(0), depth(0), flags(0){}
+		HashEntry(): keyXorData(0), data(0){}
+
+		static U64 packData(int move, int score, int depth, int flags){
+			// score is signed, store as unsigned 16-bit
+			uint16_t s = (uint16_t)(int16_t)score;
+			return ((U64)(uint32_t)move << 32) | ((U64)s << 16) | ((U64)(depth & 0xFF) << 8) | (U64)(flags & 0xFF);
+		}
+
+		static int unpackMove(U64 d){ return (int)(uint32_t)(d >> 32); }
+		static int unpackScore(U64 d){ return (int)(int16_t)(uint16_t)((d >> 16) & 0xFFFF); }
+		static int unpackDepth(U64 d){ return (int)((d >> 8) & 0xFF); }
+		static int unpackFlags(U64 d){ return (int)(d & 0xFF); }
 };
 
 class HashTable{
@@ -32,7 +45,6 @@ class HashTable{
 		void reset();
 
 		HashEntry *table;
-		static BoardState undoList[];
 		//rounded down to power of 2
 		U32 numEntries;
 		U32 numEntries_1;

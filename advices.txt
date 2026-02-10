@@ -1,0 +1,989 @@
+================================================================================
+TUNGUSKA CHESS ENGINE - SEARCH IMPROVEMENT ADVICES
+================================================================================
+Last reviewed: 2026-02-09 (update 2)
+Engine: Tunguska 1.1, ~2450 ELO (CCRL)
+Baseline STS Score: 673/1500 (44.9%) at 50ms/position
+Scope: Search.cpp, Search.h, HashTable.cpp, HashTable.h only (per rules.txt)
+
+This file lists recommended improvements, bugs found, and enhancements for
+the search algorithm, ordered by expected impact (highest first). Each item
+includes a diagnosis of the current code, what the problem is, and a concrete
+recommendation with pseudocode/formulas where applicable.
+
+Consult this file before every modification (Rule 3).
+Implement one change at a time and bench after each (Rule 5).
+
+ANALYSIS OF CURRENT SEARCH (Search.cpp):
+- Has: iterative deepening, aspiration windows, PVS (newly added), null move
+  pruning, futility pruning, check extensions, LMR, quiescence with delta
+  pruning, SEE for bad capture pruning, killer moves, history heuristic,
+  MVV-LVA, transposition table with hash move ordering.
+- Missing or broken: mate distance pruning (commented out), razoring
+  (commented out), reverse futility pruning (commented out), IID/IIR, LMP,
+  countermove heuristic, history malus, singular extensions, bad capture
+  demotion in move ordering.
+- NEW ISSUE: PVS re-search logic is inefficient (see BUG-4).
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+  BUGS:
+    [BUG-1]   Alpha-beta returns alpha instead of bestScore (fail-soft bug)
+    [BUG-2]   Futility pruning can be too aggressive (legal > 0 threshold)
+    [BUG-3]   Aspiration window evalType logic has dead/confusing code
+    [BUG-4]   PVS re-search missing intermediate zero-window step (NEW)
+
+  HIGH PRIORITY:
+    [HIGH-1]  Add Principal Variation Search (PVS) -- DONE, needs re-search fix
+    [HIGH-2]  Upgrade LMR to logarithmic table with dynamic adjustments
+    [HIGH-3]  Improve null move pruning reduction formula
+    [HIGH-4]  Enable Mate Distance Pruning (currently commented out)
+    [HIGH-5]  Add Internal Iterative Reductions (IIR)
+    [HIGH-6]  Hash table replacement scheme (depth-preferred / aging)
+
+  MEDIUM PRIORITY:
+    [MED-1]   Add Reverse Futility Pruning (static null move pruning)
+    [MED-2]   Enable and fix Razoring
+    [MED-3]   Add Countermove Heuristic
+    [MED-4]   History table gravity (prevent saturation) + history malus
+    [MED-5]   Add Late Move Pruning (LMP / move count based pruning)
+    [MED-6]   SEE pruning for quiet moves in main search
+
+  LOW PRIORITY:
+    [LOW-1]   Improve futility pruning margins and depth range
+    [LOW-2]   Aspiration window delta tuning
+    [LOW-3]   Store static eval in hash table
+    [LOW-4]   TT probing in quiescence search
+    [LOW-5]   Order bad captures after quiet moves
+
+
+================================================================================
+BUGS
+================================================================================
+
+[BUG-1] ALPHA-BETA RETURNS ALPHA INSTEAD OF BESTSCORE (FAIL-SOFT BUG)
+--------------------------------------------------------------------------------
+Location: Search.cpp, alphaBeta(), line 493
+Severity: Medium - causes subtle search inaccuracies
+
+PROBLEM:
+The function returns `alpha` at the end (line 493), but `bestScore` is tracked
+separately (line 379, updated at line 439). In a fail-soft framework, returning
+`bestScore` is more correct because it may carry a tighter bound for the
+transposition table and the parent node.
+
+Currently:
+    return alpha;   // line 493
+
+When alpha was never raised (alpha == oldAlpha), alpha is the original value
+passed in. The TT store at line 490 stores `alpha` for HFALPHA entries, but
+`bestScore` may be more precise. When alpha WAS raised (line 488), it stores
+`bestScore` for HFEXACT which is correct.
+
+Also: line 458 stores `beta` on beta cutoff (`HashTable::storeHashEntry(board,
+bestMove, beta, HFBETA, depth)`). In fail-soft, storing `bestScore` (which is
+>= beta) is more informative.
+
+RECOMMENDATION:
+Return `bestScore` instead of `alpha`. Store `bestScore` in both HFALPHA and
+HFBETA entries:
+
+    // On beta cutoff (line 458):
+    HashTable::storeHashEntry(board, bestMove, bestScore, HFBETA, depth);
+    return bestScore;  // fail-soft: return actual score, not beta
+
+    // At end of function (line 487-493):
+    if (alpha != oldAlpha){
+        HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
+    } else {
+        HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
+    }
+    return bestScore;
+
+This is a small change but improves the accuracy of TT entries, which
+compounds across the entire search tree. NOTE: When making this change,
+verify that probeHashEntry() correctly handles fail-soft scores (scores
+outside [alpha, beta]).
+
+
+[BUG-2] FUTILITY PRUNING CAN BE TOO AGGRESSIVE (LEGAL > 0 THRESHOLD)
+--------------------------------------------------------------------------------
+Location: Search.cpp, alphaBeta(), lines 361-368 and 400-404
+Severity: Medium - may prune important moves
+
+PROBLEM:
+The futility pruning condition in the move loop is:
+
+    if (f_prune && legal > 0 && !Move::captured(tmp_mv) && ...)
+
+The check `legal > 0` ensures at least one move has been fully searched before
+pruning begins. However, this means pruning starts from the SECOND legal move.
+If the first legal move was a poor choice (e.g., the hash move was missing),
+all other quiet moves get pruned based on a potentially unreliable alpha.
+
+Most implementations require at least 1-2 moves to have been fully searched,
+and some also require that alpha was actually improved before enabling
+futility pruning.
+
+RECOMMENDATION:
+Increase the threshold to `legal > 1` at minimum:
+
+    if (f_prune && legal > 1 && !Move::captured(tmp_mv) &&
+        !Move::promoteTo(tmp_mv) && !oppAtCheck){
+        board.undoMove(tmp_mv, undo);
+        continue;
+    }
+
+Even better: only enable futility pruning when alpha has been raised by at
+least one move (meaning a reasonable score baseline exists):
+
+    if (f_prune && alpha > oldAlpha && !Move::captured(tmp_mv) &&
+        !Move::promoteTo(tmp_mv) && !oppAtCheck){
+
+
+[BUG-3] ASPIRATION WINDOW EVALTYPE HAS DEAD/CONFUSING CODE
+--------------------------------------------------------------------------------
+Location: Search.cpp, aspirationWindow(), lines 208-228
+Severity: Low - no functional bug but confusing control flow
+
+PROBLEM:
+The evalType variable is set but only used for the `if(evalType == exact)
+break;` check. The sequential if-statements (not if-else-if) could in theory
+cause multiple conditions to trigger (though in practice they are mutually
+exclusive with the window semantics). Also, on fail-low (f <= alpha), the code
+narrows beta as `beta = (alpha + beta) / 2` (line 215). This is non-standard:
+normally on fail-low only alpha is widened, and beta stays unchanged. Narrowing
+beta on fail-low can cause the next search to be cheaper but risks oscillation.
+
+RECOMMENDATION:
+Simplify and use standard approach:
+
+    while (abs(f) < MATE_SCORE - 1) {
+        f = alphaBeta(alpha, beta, depth, true);
+        if (info.stopped) break;
+
+        if (f <= alpha) {
+            alpha = std::max(-MATE_SCORE, alpha - delta);
+            // Do NOT change beta on fail-low
+        } else if (f >= beta) {
+            beta = std::min(MATE_SCORE, beta + delta);
+            // Do NOT change alpha on fail-high
+        } else {
+            break;  // exact result within window
+        }
+        delta += delta / 2;
+    }
+
+
+[BUG-4] PVS RE-SEARCH MISSING INTERMEDIATE ZERO-WINDOW + BETA CHECK (NEW)
+--------------------------------------------------------------------------------
+Location: Search.cpp, alphaBeta(), lines 428-431
+Severity: Medium-High - wastes significant search time
+
+PROBLEM:
+The newly added PVS re-search logic at line 429 is:
+
+    if (score > alpha && (doReduce || legal > 1)){
+        score = -alphaBeta(-beta, -alpha, depth - 1, true);
+    }
+
+This has TWO performance issues:
+
+Issue A: Missing `score < beta` check.
+When `score >= beta`, the re-search is unnecessary because the beta cutoff
+at line 447 will happen regardless. The full-window re-search at full depth
+is very expensive and completely wasted when we already know score >= beta.
+In time-critical 50ms searches, this wastes precious time.
+
+Issue B: Missing intermediate zero-window step for LMR moves.
+For LMR moves, the current flow is:
+  1. Reduced zero-window search  (cheap)
+  2. If fail-high: full-window full-depth re-search  (expensive!)
+
+The correct flow for LMR + PVS is:
+  1. Reduced zero-window search  (cheap)
+  2. If fail-high: full-depth ZERO-WINDOW re-search  (moderate)
+  3. If still fail-high AND score < beta: full-window re-search  (expensive)
+
+The intermediate zero-window search (step 2) is crucial because many LMR
+fail-highs are confirmed by the zero-window at full depth but still end
+up as beta cutoffs. Going directly to a full-window search (current code)
+is much more expensive for the same result.
+
+RECOMMENDATION:
+Replace lines 428-431 with this two-stage re-search:
+
+    // Stage 1: LMR fail-high -> re-search at full depth with zero-window
+    if (score > alpha && doReduce) {
+        score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+    }
+
+    // Stage 2: Zero-window fail-high -> re-search with full window
+    //          But ONLY if score is within (alpha, beta) -- skip if >= beta
+    if (score > alpha && score < beta && legal > 1) {
+        score = -alphaBeta(-beta, -alpha, depth - 1, true);
+    }
+
+This is the standard PVS + LMR re-search pattern used by Stockfish, Ethereal,
+and virtually all strong engines. It avoids two categories of wasted work:
+  - Skips full-window re-search when score >= beta (Issue A)
+  - Uses cheap zero-window before expensive full-window for LMR (Issue B)
+
+Expected speedup: significant at 50ms time control. More nodes at same depth,
+or same nodes reaching deeper. Could be worth +5-15 ELO just from the
+time savings.
+
+
+================================================================================
+HIGH PRIORITY IMPROVEMENTS
+================================================================================
+
+[HIGH-1] ADD PRINCIPAL VARIATION SEARCH (PVS)
+--------------------------------------------------------------------------------
+Expected gain: +20 to +40 ELO
+Status: DONE (lines 406-431) -- BUT needs re-search fix (see BUG-4)
+Files: Search.cpp
+
+PVS has been implemented. The structure is correct:
+  - First move (legal == 1): full window (-beta, -alpha)
+  - LMR candidates: reduced zero-window (-alpha-1, -alpha)
+  - Other non-first moves: full-depth zero-window (-alpha-1, -alpha)
+  - Re-search on fail-high
+
+HOWEVER, the re-search logic has a performance problem (BUG-4).
+See BUG-4 for details and fix.
+
+
+[HIGH-2] UPGRADE LMR TO LOGARITHMIC TABLE WITH DYNAMIC ADJUSTMENTS
+--------------------------------------------------------------------------------
+Expected gain: +30 to +50 ELO (over current flat LMR)
+Status: PARTIALLY IMPLEMENTED, marked "TODO FIX"
+Files: Search.cpp, Search.h
+
+DIAGNOSIS:
+The current LMR (lines 409-418) uses a simple fixed reduction:
+
+    int reduce = legal > 6 ? 2 : 1;
+
+This is very basic. Modern engines use a logarithmic 2D table indexed by
+[depth][moveNumber], providing smoother reductions that scale properly.
+
+Current conditions are reasonable (excludes captures, promotions, killers,
+checks), but the reduction itself is too crude.
+
+RECOMMENDATION:
+1) Add and initialize a static LMR table at startup:
+
+    // In Search.h, add:
+    static int lmrTable[64][64];
+
+    // In Search::initHeuristics() or a new init function:
+    for (int d = 1; d < 64; d++) {
+        for (int m = 1; m < 64; m++) {
+            lmrTable[d][m] = (int)(0.77 + log(d) * log(m) / 2.36);
+        }
+    }
+
+2) Use the table in alphaBeta():
+
+    if (depth >= 3 && legal > 1 && !atCheck &&
+        Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0 &&
+        !isKiller && !oppAtCheck) {
+
+        int R = lmrTable[std::min(depth, 63)][std::min(legal, 63)];
+
+        // Dynamic adjustments (add these incrementally):
+        // - History-based: R -= historyScore / 5000;
+        // - At PV nodes: R -= 1;
+        // - At cut-nodes: R += 1;
+
+        R = std::max(R, 1);
+        R = std::min(R, depth - 2);  // keep at least depth 1
+
+        score = -alphaBeta(-alpha - 1, -alpha, depth - 1 - R, true);
+
+        // Re-search at full depth if fail-high
+        if (score > alpha) {
+            score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+            // PVS re-search (if PVS is implemented)
+            if (score > alpha && score < beta) {
+                score = -alphaBeta(-beta, -alpha, depth - 1, true);
+            }
+        }
+    }
+
+Try different constants for the formula. Common calibrations:
+  - Weiss: 1.35 + ln(depth) * ln(moves) / 2.75
+  - Ethereal: 0.78 + ln(depth) * ln(moves) / 2.47
+  - General: 0.75 + ln(depth) * ln(moves) / 2.25
+
+Pick the one with the best bench score.
+
+
+[HIGH-3] IMPROVE NULL MOVE PRUNING REDUCTION FORMULA
+--------------------------------------------------------------------------------
+Expected gain: +10 to +15 ELO
+Status: DONE but with conservative R formula
+Files: Search.cpp
+
+DIAGNOSIS:
+The current null move reduction (line 310):
+
+    int R = 2 + depth/6;
+
+This gives R=2 at depth 1-5, R=3 at depth 6-11, R=4 at depth 12-17.
+This is conservative. Modern engines use more aggressive formulas.
+
+The depth condition `depth > R` (line 312) means at depth 3 with R=2,
+null move is applied (3 > 2 -> searches at depth 0 = qsearch). Fine.
+
+The material check `board.material[side] > ENDGAME_MAT` (1779) is reasonable.
+
+RECOMMENDATION:
+Use a more aggressive adaptive formula:
+
+    int R = 3 + depth / 3;
+
+    // Optional: increase R when eval is much better than beta
+    if (static_set && static_eval > beta) {
+        R += std::min((static_eval - beta) / 200, 3);
+    }
+
+    // Clamp
+    R = std::min(R, depth - 1);  // always search at least depth 1
+
+This gives R=3 at depth 3-5, R=4 at depth 6-8, R=5 at depth 9-11.
+The eval-based adjustment makes pruning more aggressive when clearly winning.
+
+Also, consider requiring depth >= 3 explicitly (not just depth > R).
+The current `depth > R` with R >= 2 already implies depth >= 3, so
+this is fine.
+
+
+[HIGH-4] ENABLE MATE DISTANCE PRUNING (CURRENTLY COMMENTED OUT)
+--------------------------------------------------------------------------------
+Expected gain: +2 to +5 ELO, helps in mate positions
+Status: COMMENTED OUT (lines ~253-267 in Search.cpp)
+Files: Search.cpp
+
+DIAGNOSIS:
+Lines 253-267 contain a complete Mate Distance Pruning implementation that is
+commented out. MDP tightens the alpha-beta window based on the shortest
+possible mate from the current ply. This is safe pruning that never misses
+a better result.
+
+The implementation uses MATE_SCORE (29999). The mate return at checkmate
+(line 480) uses -INFINITE + board.ply (= -30000 + ply). There is a 1-point
+inconsistency between MATE_SCORE (29999) and INFINITE (30000).
+
+RECOMMENDATION:
+1) Verify mate score consistency. Ideally, use MATE_SCORE everywhere for
+   mate values and INFINITE only for initial window bounds:
+   - Line 480: change `return -INFINITE + board.ply` to
+     `return -MATE_SCORE + board.ply` (= -29999 + ply)
+   - Do the same in Quiescence (line 609).
+
+2) Uncomment the Mate Distance Pruning code (lines 253-267).
+
+3) Bench to verify no regression. This should be risk-free.
+
+
+[HIGH-5] ADD INTERNAL ITERATIVE REDUCTIONS (IIR)
+--------------------------------------------------------------------------------
+Expected gain: +5 to +10 ELO
+Status: NOT DONE
+Files: Search.cpp
+
+DIAGNOSIS:
+When no TT move (pvMove) is available, the engine has no strong first-move
+candidate. Move ordering falls back to captures > killers > history. Without
+a TT move, the first move is unlikely to be the best, leading to wider trees.
+
+IIR (Internal Iterative Reductions) is a modern, simple technique: if no
+hash move exists, reduce the search depth by 1, since this node is probably
+not critical. Subsequent iterations will populate the TT.
+
+RECOMMENDATION:
+After the TT probe (line 288) and before the pruning decisions:
+
+    // Internal Iterative Reduction
+    if (depth >= 4 && pvMove == Move::NO_MOVE && !atCheck) {
+        depth--;
+    }
+
+This is a single line of code. It is safe because:
+- Only applies at depth >= 4 (shallow searches are unaffected)
+- Only when TT has no move for this position
+- Subsequent iterations fill the TT for this position
+
+Alternative: traditional IID (Internal Iterative Deepening):
+
+    if (depth >= 6 && pvMove == Move::NO_MOVE) {
+        alphaBeta(alpha, beta, depth / 2, true);
+        HashTable::probeHashEntry(board, &pvMove, &score, alpha, beta, depth);
+    }
+
+Try IIR first (simpler). If bench doesn't improve, try IID.
+
+
+[HIGH-6] HASH TABLE REPLACEMENT SCHEME
+--------------------------------------------------------------------------------
+Expected gain: +5 to +15 ELO
+Status: BASIC (always-replace)
+Files: HashTable.cpp, HashTable.h
+
+DIAGNOSIS:
+The current storeHashEntry() (lines 96-124) unconditionally overwrites any
+existing entry. Deep entries computed with many nodes can be replaced by
+shallow entries from unrelated positions.
+
+Also: the HashEntry struct is 28+ bytes (U64 zKey + 4 ints). Due to alignment,
+this likely rounds to 32 bytes. This wastes hash capacity.
+
+RECOMMENDATION:
+Option A - Depth-preferred with age (simpler):
+Add an `age` (or `generation`) field to HashEntry. On store:
+
+    HashEntry* entry = &table[index];
+    // Replace if: empty, same position, deeper/equal, or stale
+    if (entry->zKey == 0 ||
+        entry->zKey == board.zKey ||
+        depth + 2 * ageDelta >= entry->depth) {
+        // store ...
+        entry->generation = currentGeneration;
+    }
+
+Increment `currentGeneration` in clearSearch() at the start of each search.
+The `2 * ageDelta` term makes stale entries easier to replace.
+
+Option B - Pack HashEntry to 16 bytes (bigger win):
+
+    struct HashEntry {
+        U64 zKey;          // 8 bytes
+        int move;          // 4 bytes
+        int16_t score;     // 2 bytes
+        uint8_t depth;     // 1 byte
+        uint8_t genBound;  // 1 byte (6 bits generation + 2 bits flags)
+    };  // Total: 16 bytes
+
+This DOUBLES the effective hash table capacity with the same memory. This
+alone can be worth +10 ELO because more positions are cached.
+
+
+================================================================================
+MEDIUM PRIORITY IMPROVEMENTS
+================================================================================
+
+[MED-1] ADD REVERSE FUTILITY PRUNING (STATIC NULL MOVE PRUNING)
+--------------------------------------------------------------------------------
+Expected gain: +10 to +15 ELO
+Status: Weak version at lines 293-303; commented-out proper version at 327-333
+Files: Search.cpp
+
+DIAGNOSIS:
+Lines 293-303 implement a crude eval pruning at depth < 3 with margin 120 *
+depth. Lines 327-333 have a commented-out better version. Modern engines apply
+reverse futility pruning up to depth 7 or higher.
+
+The condition `abs(beta - 1) > -INFINITE + 100` (line 297) is meant to avoid
+pruning near mate scores. This is an unusual way to express this; the standard
+check is `abs(beta) < ISMATE`.
+
+RECOMMENDATION:
+Replace the existing eval pruning with a proper reverse futility pruning:
+
+    if (!atCheck && depth <= 7 && abs(beta) < ISMATE) {
+        static_eval = static_set ? static_eval :
+                      Evaluation::evaluate(board, side);
+        static_set = true;
+
+        int rfpMargin = 85 * depth;  // tune: try 70-120
+
+        if (static_eval - rfpMargin >= beta) {
+            return static_eval - rfpMargin;
+        }
+    }
+
+Extending from depth < 3 to depth <= 7 is a significant improvement.
+Tune the margin by benching with values 70, 80, 90, 100, 110, 120.
+
+
+[MED-2] ENABLE AND FIX RAZORING
+--------------------------------------------------------------------------------
+Expected gain: +3 to +5 ELO
+Status: COMMENTED OUT (lines 335-358)
+Files: Search.cpp
+
+DIAGNOSIS:
+Two commented-out razoring implementations exist. The RAZOR_MARGIN array
+(line 237) is defined but never used. Razoring is the complement of reverse
+futility: when eval is far BELOW alpha, drop to quiescence.
+
+RECOMMENDATION:
+A clean implementation:
+
+    if (depth <= 3 && !atCheck && pvMove == Move::NO_MOVE) {
+        static_eval = static_set ? static_eval :
+                      Evaluation::evaluate(board, side);
+        static_set = true;
+
+        int razorMargin = 300 + 250 * (depth - 1);
+
+        if (static_eval + razorMargin < alpha) {
+            if (depth == 1) {
+                return Quiescence(alpha, beta);
+            }
+            int val = Quiescence(alpha, beta);
+            if (val < alpha) return val;
+        }
+    }
+
+At depth 1, always drop to QS when margin is breached. At depth 2-3,
+verify with QS before committing.
+
+
+[MED-3] ADD COUNTERMOVE HEURISTIC
+--------------------------------------------------------------------------------
+Expected gain: +5 to +10 ELO
+Status: NOT DONE
+Files: Search.cpp, Search.h
+
+DIAGNOSIS:
+Move ordering is: PV > Captures (MVV-LVA) > Killers > History.
+The countermove heuristic adds a tier between killers and history. It stores
+"the move that refuted the opponent's last move."
+
+RECOMMENDATION:
+Add a static table in Search:
+
+    // In Search.h:
+    static int counterMoves[14][64];  // [previous_piece][previous_toSq]
+    static const int COUNTER_BONUS = 750000;  // between killers and history
+
+    // In clearSearch():
+    // zero out counterMoves
+
+    // On beta cutoff from a quiet move (after killer update):
+    // Need previous move info - track it through search
+    // counterMoves[prevPiece][prevTo] = bestMove;
+
+    // In orderMoves(), add scoring:
+    // if (mv == counterMoves[prevPiece][prevTo])
+    //     moveScore[i] = MoveScore(mv, COUNTER_BONUS);
+
+The challenge is passing previous move info. Consider adding a simple
+"search stack" (array of per-ply info structs) to track the previous
+move at each ply.
+
+
+[MED-4] HISTORY TABLE GRAVITY + HISTORY MALUS
+--------------------------------------------------------------------------------
+Expected gain: +10 to +20 ELO
+Status: NOT DONE (history grows unboundedly, no malus)
+Files: Search.cpp
+
+DIAGNOSIS:
+Current history update (lines 468-471):
+
+    board.searchHistory[piece][Move::to(bestMove)] += depth * depth;
+
+Problems:
+1. Grows unboundedly during a search - values become huge, relative
+   differences between moves diminish (saturation).
+2. Only the BEST move gets a bonus. Failed quiet moves get no penalty.
+
+RECOMMENDATION:
+Use the "gravity" formula used by Stockfish/Ethereal:
+
+    #define MAX_HISTORY 16384
+
+    static inline void updateHistory(int* entry, int bonus) {
+        bonus = std::max(-MAX_HISTORY, std::min(bonus, MAX_HISTORY));
+        *entry += bonus - (*entry) * abs(bonus) / MAX_HISTORY;
+    }
+
+    // Bonus calculation:
+    int bonus = std::min(300 * depth - 250, 2000);
+
+    // On beta cutoff from a quiet move:
+    updateHistory(&board.searchHistory[piece][to], bonus);
+
+    // MALUS: penalize all quiet moves that were tried but didn't cut off:
+    for (each previously searched quiet move m_fail) {
+        int failPiece = board.board[Move::from(m_fail)];
+        int failTo = Move::to(m_fail);
+        updateHistory(&board.searchHistory[failPiece][failTo], -bonus);
+    }
+
+This requires tracking which quiet moves were searched. Keep a small
+array (e.g., int quietMovesTried[64]; int nQuiets = 0;) in the move loop.
+
+The gravity formula automatically prevents saturation and the malus
+dramatically improves move ordering by identifying moves that consistently
+fail.
+
+
+[MED-5] ADD LATE MOVE PRUNING (LMP / MOVE COUNT BASED PRUNING)
+--------------------------------------------------------------------------------
+Expected gain: +10 to +20 ELO
+Status: NOT DONE
+Files: Search.cpp
+
+DIAGNOSIS:
+The engine has futility pruning (eval-based) but no Late Move Pruning
+(move-count-based). LMP prunes quiet moves that appear late in the move
+list at shallow depths, based purely on how many moves have been searched.
+
+RECOMMENDATION:
+Add LMP to the move loop:
+
+    // LMP thresholds by depth (approximately 3 + depth^2)
+    static const int LMP_THRESHOLD[9] = {0, 5, 8, 13, 20, 29, 40, 53, 68};
+
+    // In the move loop, after legality check but before searching:
+    if (depth <= 8 && !atCheck && legal > LMP_THRESHOLD[depth] &&
+        Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0 &&
+        !oppAtCheck && bestScore > -ISMATE) {
+        board.undoMove(tmp_mv, undo);
+        continue;
+    }
+
+The `bestScore > -ISMATE` condition ensures we never prune when we
+might be in a mating situation. Tune thresholds by benching.
+
+
+[MED-6] SEE PRUNING FOR QUIET MOVES IN MAIN SEARCH
+--------------------------------------------------------------------------------
+Expected gain: +3 to +10 ELO
+Status: NOT DONE (SEE only used in QS for captures)
+Files: Search.cpp
+
+DIAGNOSIS:
+SEE (Static Exchange Evaluation) is implemented (lines 617-716) and works
+in quiescence for bad capture filtering. It is NOT used in the main search
+to prune quiet moves that move pieces to dangerous squares.
+
+RECOMMENDATION:
+At low depths, prune quiet moves where the piece moves to a square where
+it would be lost:
+
+    // Before searching a quiet move at low depth:
+    if (depth <= 6 && !atCheck && !oppAtCheck &&
+        Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0) {
+        int seeThreshold = -50 * depth;
+        if (isBadCapture(board, tmp_mv, side)) {  // repurpose SEE
+            board.undoMove(tmp_mv, undo);
+            continue;
+        }
+    }
+
+Note: isBadCapture currently only works for captures. A modified version
+that checks the exchange on the destination square for quiet moves would
+be needed. Alternatively, check if the destination square is attacked by
+an enemy pawn (simple and fast heuristic).
+
+
+================================================================================
+LOW PRIORITY IMPROVEMENTS
+================================================================================
+
+[LOW-1] IMPROVE FUTILITY PRUNING MARGINS AND DEPTH RANGE
+--------------------------------------------------------------------------------
+Expected gain: +2 to +5 ELO
+Files: Search.cpp
+
+DIAGNOSIS:
+Current futility margins (line 236):
+    FUTIL_MARGIN[4] = {0, 200, 300, 500};
+Applied at depth <= 3. Modern engines use linearly scaling margins up to
+depth 6-8.
+
+RECOMMENDATION:
+Replace with a formula and extend the depth range:
+
+    // Replace array with: int futilityMargin = 150 * depth;
+    // Extend: if (depth <= 6 && ...)
+    // Bench different values: 100, 125, 150, 175, 200 per depth
+
+
+[LOW-2] ASPIRATION WINDOW DELTA TUNING
+--------------------------------------------------------------------------------
+Expected gain: +2 to +5 ELO
+Files: Search.cpp
+
+DIAGNOSIS:
+Current: delta = 15, applied from depth > 5, widening delta += delta / 2.
+On fail-low, beta is narrowed (non-standard).
+
+RECOMMENDATION:
+- Try delta = 17-25 (slightly wider initial window = fewer re-searches)
+- Start at depth > 4 (or > 3) to get aspiration benefits earlier
+- On fail-low, do NOT narrow beta (see BUG-3)
+- Bench different delta values: 12, 15, 17, 20, 25
+
+
+[LOW-3] STORE STATIC EVAL IN HASH TABLE
+--------------------------------------------------------------------------------
+Expected gain: +3 to +8 ELO
+Files: HashTable.h, HashTable.cpp, Search.cpp
+
+DIAGNOSIS:
+Static eval is computed in alphaBeta() for pruning (lines 298, 363). If
+stored in the TT, it could be reused on TT hits, saving evaluate() calls.
+
+RECOMMENDATION:
+Add a staticEval field to HashEntry. On store, save static_eval. On probe,
+retrieve it. This saves eval calls and provides data at more nodes.
+Best combined with HIGH-6 (hash table restructuring).
+
+
+[LOW-4] TT PROBING IN QUIESCENCE SEARCH
+--------------------------------------------------------------------------------
+Expected gain: +5 to +15 ELO
+Files: Search.cpp
+
+DIAGNOSIS:
+Quiescence search (lines 496-615) does NOT probe the TT. Positions fully
+analyzed in the main search are re-evaluated from scratch in QS.
+
+RECOMMENDATION:
+Add TT probe at the start of Quiescence():
+
+    int pvMove = Move::NO_MOVE;
+    int ttScore = -INFINITE;
+    if (HashTable::probeHashEntry(board, &pvMove, &ttScore, alpha, beta, 0)){
+        return ttScore;
+    }
+
+    // Use TT-stored static eval if available
+    // Use TT move as first capture to try
+
+Also store QS results to TT with depth = 0. The probe with depth = 0
+means any existing entry with depth >= 0 can produce a cutoff.
+
+
+[LOW-5] ORDER BAD CAPTURES AFTER QUIET MOVES
+--------------------------------------------------------------------------------
+Expected gain: +5 to +10 ELO
+Files: Search.cpp
+
+DIAGNOSIS:
+ALL captures are scored with CAPT_BONUS (1000000) + MVV_LVA. Even losing
+captures (e.g., queen takes defended pawn) are searched before killers and
+history moves. The SEE code is implemented but the capture demotion in
+orderMoves() is commented out (lines 95-107).
+
+RECOMMENDATION:
+Enable SEE-based demotion of bad captures in orderMoves():
+
+    if (capt > 0) {
+        int from = Move::from(mv);
+        int to = Move::to(mv);
+        int attacker = board.board[from];
+        int target = board.board[to];
+        int seeScore = Search::see(&board, to, target, from, attacker);
+
+        if (seeScore >= 0) {
+            // Good capture: keep MVV-LVA + CAPT_BONUS
+            moveScore[i] = MoveScore(mv,
+                MVV_VLA_SCORES[capt][attacker] + CAPT_BONUS);
+        } else {
+            // Bad capture: score below quiet moves (negative)
+            moveScore[i] = MoveScore(mv, seeScore);
+        }
+    }
+
+Bad captures get negative scores, placing them after all quiet moves.
+NOTE: Computing SEE for every capture in ordering adds overhead. If bench
+decreases due to SEE cost, try only computing SEE at higher depths, or
+use a simplified SEE.
+
+
+================================================================================
+FUTURE / ADVANCED (once all above are done)
+================================================================================
+
+ADVICE: SINGULAR EXTENSIONS
+    When the TT move is significantly better than alternatives (tested by
+    a reduced-depth search excluding the TT move), extend its search by 1 ply.
+    This avoids missing critical tactical lines. Worth +30-60 ELO in strong
+    engines. Requires: TT stores bound type + sufficient depth. Complex to
+    implement but very powerful.
+
+ADVICE: CONTINUATION HISTORY
+    Track move pair correlations: what move is good after a specific previous
+    move? Two levels: 1-ply (countermove history) and 2-ply (follow-up
+    history). Both indexed by [prevPiece][prevTo][currPiece][currTo].
+    Worth +20-40 ELO. Requires search stack for tracking previous moves.
+
+ADVICE: CAPTURE HISTORY
+    Separate history table for captures: captureHistory[piece][to][captured].
+    Improves capture ordering beyond MVV-LVA. Worth +5-10 ELO.
+
+
+================================================================================
+IMPLEMENTATION ORDER SUGGESTION (updated after PVS implementation)
+================================================================================
+Based on expected impact, risk, and complexity:
+
+Phase 1 - Quick wins (NEXT - do these now):
+  1. [BUG-4]  Fix PVS re-search (two-stage + beta check) <-- URGENT
+  2. [BUG-1]  Fix alpha/bestScore return (fail-soft)
+  3. [HIGH-4] Uncomment Mate Distance Pruning
+  4. [HIGH-5] Add IIR (single line of code)
+  5. [BUG-2]  Fix futility pruning threshold
+
+Phase 2 - High impact features:
+  6. [HIGH-2] Upgrade LMR to logarithmic table
+  7. [HIGH-3] Improve null move reduction
+  8. [MED-1]  Proper Reverse Futility Pruning
+
+Phase 3 - Medium impact features:
+  9. [MED-4]  History gravity + malus
+ 10. [MED-5]  Add Late Move Pruning
+ 11. [MED-2]  Enable Razoring
+ 12. [HIGH-6] Hash table replacement scheme
+
+Phase 4 - Polish and optimization:
+ 13. [MED-3]  Countermove heuristic
+ 14. [LOW-5]  Bad captures after quiet moves
+ 15. [LOW-4]  TT probing in QS
+ 16. [LOW-1]  Tune futility margins
+ 17. [LOW-2]  Tune aspiration windows
+ 18. [LOW-3]  Store static eval in TT
+ 19. [MED-6]  SEE pruning for quiet moves
+
+COMPLETED:
+  [HIGH-1] PVS -- DONE
+  [BUG-4]  PVS re-search -- DONE
+  [BUG-1]  Fail-soft return -- DONE
+  [BUG-2]  Futility threshold -- DONE
+  [HIGH-2] LMR logarithmic table -- DONE (+16 pts!)
+  [HIGH-3] Null move eval adjustment -- DONE (+1 pt)
+  [HIGH-4] MDP -- DONE (by team)
+  [HIGH-5] IIR -- DONE (+1 pt)
+  [HIGH-6] Hash depth-preferred -- DONE (+7 pts!)
+  [MED-1]  Reverse Futility Pruning -- DONE (+2 pts)
+  [MED-2]  Razoring -- DONE (+3 pts)
+
+ATTEMPTED AND REVERTED (no benefit for STS):
+  [MED-4]  History gravity+malus -- REVERTED (-6 pts)
+  [MED-5]  LMP -- REVERTED (-115 pts! STS-hostile)
+  [LOW-4]  QS TT probe -- REVERTED (-10 pts, conflicts with hash scheme)
+  [LOW-5]  Bad capture demotion -- REVERTED (-10 pts, SEE overhead)
+
+Remember: BENCH AFTER EVERY CHANGE. Revert if score decreases (Rule 5).
+
+
+================================================================================
+CHANGE LOG
+================================================================================
+[Add entries here as changes are implemented and benched]
+NOTE TO TEAM: Please log every change per Rule 10! Include bench score.
+
+Date       | Change                        | Bench Delta | New Score
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-1] PVS implemented      | ???         | ~678
+           | (by team)                     |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [BUG-4] PVS re-search fix     | -4 to +0    | 674
+           | Two-stage: ZW then full       |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [BUG-1] Fail-soft return      | +2          | 676
+           | return bestScore, not alpha   |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-4] MDP uncommented      | +0          | (by team)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [BUG-2] Futility legal > 1    | -2 to +0    | 674
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-2] LMR logarithmic tbl  | +16         | 690-691
+           | log(d)*log(m)/3.00, clamped   |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-3] Null move eval adj   | +1          | 692
+           | R += min((eval-beta)/200, 3)  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-1] Reverse Futility Prun | +2          | 694-695
+           | depth<=5, margin=90*depth     |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-4] History gravity+malus  | -6 REVERTED | (686)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-5] LMP                   | -115 REVERT | (578-586)
+           | STS punishes move pruning     |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-2] Razoring              | +3          | 695
+           | depth<=3, margin=300+250*(d-1)|             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-6] Hash depth-preferred  | +7          | 701-702
+           | Don't overwrite deeper entries|             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-5] IIR re-added         | +1          | 703
+           | depth>=4, no TT move, !check  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [LOW-4] QS TT probe           | -10 REVERT  | (691)
+           | Conflicts w/ depth-preferred  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [LOW-5] Bad capture demotion   | -10 REVERT  | (693)
+           | SEE overhead too expensive    |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-3] Countermove heuristic  | +0 to +1    | 701-703
+           | counterMoves[14][64], 750000  |             |
+-----------+-------------------------------+-------------+----------
+PHASE 2: TUNING (from 701 baseline)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | RFP margin 100*depth          | +4          | 705
+           | (was 90*depth)                |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | Remove NMP eval-based R adj   | +2          | 706-710
+           | Simpler R = 2+depth/6 only    |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | Widen razoring margins        | +1-2        | 707-710
+           | 350+300*(d-1), was 300+250    |             |
+-----------+-------------------------------+-------------+----------
+ALSO ATTEMPTED AND REVERTED (no benefit for STS):
+  - History-based LMR (hist/5000,8000,16000): -2 to -3
+  - Aspiration fix (no beta narrowing on fail-low): -3
+  - Aspiration depth<=4: -21
+  - LMR depth>4: -20
+  - LMR legal>4: -31
+  - LMR divisor /2.95: +0, /3.05: -8
+  - Null move R=3+d/6: -30, R=2+d/8: -13
+  - Null move depth>=4: -17
+  - Null move verification (d>=10,12): +0 (neutral)
+  - Singular extensions: +0 (neutral, too complex)
+  - Fail-soft beta cutoff: -6
+  - Pawn-on-7th extension: +0 (neutral)
+  - Recapture extension: -215 (catastrophic tree explosion)
+  - QS TT move ordering: -7
+  - QS delta 150: -8, 300: -3
+  - History on beta cutoffs: -32 (saturation)
+  - History aging: N/A (already reset per position)
+  - Hash aging (age-aware replacement): -3 to -8
+  - Hash depth+1: -6, depth+3: -4, depth+4: -22
+  - RFP margin 110*d: -2, RFP depth<=6: -2
+  - Razoring 400+350*(d-1): -6
+  - IIR depth>=5: -6
+  - Cut-node LMR: -17
+  - PV-aware LMR: -28
+  - PST ordering tiebreaker: -33
+  - Futility various margins: -3 to +0
+  - Countermove excluded from LMR: -11
+  - Ply-2 killers: -6
+  - Time check 4096: (killed by team, inconclusive)
+-----------+-------------------------------+-------------+----------
+FINAL: 705-710/1500 (47.0-47.3%) from baseline 673/1500 (44.9%)
+Average confirmed: ~707/1500 (47.1%)
+Total improvement: ~+34 points (+2.2%)
+
+KEY INSIGHT: STS at 50ms rewards LESS aggressive pruning. Every technique
+that prunes more quiet moves (LMP, aggressive LMR, extended futility,
+aggressive null move, cut-node LMR) hurts STS. Widening margins (less
+pruning) and removing eval-based aggressiveness helps.
+
+REMAINING UNTRIED:
+  - Hash table packing (16 bytes per entry, doubles capacity)
+  - Continuation history (complex, may not help STS)
+  - Capture history (moderate complexity)
+  - Move ordering micro-optimization (selection sort vs std::sort)
+
+================================================================================

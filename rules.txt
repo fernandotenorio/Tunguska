@@ -1,0 +1,83 @@
+================================================================================
+TUNGUSKA CHESS ENGINE - PROJECT RULES
+================================================================================
+
+RULE 1 (MOST IMPORTANT): SEARCH-ONLY MODIFICATIONS
+    Do NOT change any part of the engine other than the search algorithm.
+    Files that may be modified: Search.cpp, Search.h, HashTable.cpp, HashTable.h
+    Files that must NOT be modified: Evaluation.cpp, Evaluation.h, Board.cpp,
+    Board.h, BoardState.cpp, BoardState.h, MoveGen.cpp, MoveGen.h, Move.cpp,
+    Move.h, Magic.cpp, Magic.h, BitBoardGen.cpp, BitBoardGen.h, Zobrist.cpp,
+    Zobrist.h, defs.h, UCI.cpp, UCI.h, FenParser.cpp, FenParser.h,
+    StringUtils.cpp, StringUtils.h, Perft.cpp, Perft.h, TestSuite.cpp,
+    TestSuite.h
+
+RULE 2: MEASURE BEFORE AND AFTER EVERY CHANGE
+    Run the `bench` command before and after every modification.
+    The bench runs STS1-STS15_LAN.EPD at 50ms/position (1500 positions).
+    Record the baseline and all subsequent scores.
+    If a change decreases the score, revert it immediately.
+
+RULE 3: CONSULT ADVICES.TXT BEFORE EACH ITERATION
+    Before starting any modification, read ./advices.txt for guidance on
+    what can and should be improved. Follow the recommendations in priority
+    order.
+
+RULE 4: MINIMAL REFACTORING
+    Refactor only what is strictly necessary for the improvement.
+    Do not reorganize code for aesthetic reasons.
+    Do not add unnecessary abstractions or classes.
+    Keep changes focused and small.
+
+RULE 5: ONE CHANGE AT A TIME
+    Implement one improvement at a time.
+    Benchmark after each change.
+    If the bench score decreases, revert and try a different approach.
+    Document each change and its impact.
+
+RULE 6: PRESERVE ENGINE CORRECTNESS
+    Never introduce bugs that affect move legality or game rules.
+    The engine must still pass all perft tests.
+    Mate detection and draw detection must remain correct.
+
+RULE 7: DO NOT CHANGE TIME MANAGEMENT
+    Time management in UCI.cpp must not be modified.
+    Search termination via info.stopped must be respected.
+
+RULE 8: KEEP HASH TABLE COMPATIBLE
+    If modifying HashTable, maintain backward compatibility with the
+    existing HashEntry structure and probing/storing interface.
+    The hash table size and allocation must remain configurable.
+
+RULE 9: TEST ON STS BENCHMARK
+    The primary metric is the STS (Strategic Test Suite) bench score.
+    Secondary validation: tactical test positions if available.
+    The goal is to maximize the number of correct best moves found
+    within the 50ms time limit per position.
+
+RULE 10: DOCUMENT IMPROVEMENTS
+    After each successful change, add a brief note to advices.txt
+    documenting what was done and the resulting bench score delta.
+
+RULE 11: NO ELO REGRESSION ALLOWED
+    No improvement that causes a decrease in ELO is acceptable.
+    Every change must be validated against the bench score.
+    If a change reduces the STS score (our proxy for ELO), it must be
+    reverted immediately, no exceptions. Only strictly positive or neutral
+    changes may be kept.
+
+RULE 12: USE TMUX SESSION FOR ENGINE EXECUTION
+    All bench runs, all engine running code, and any engine execution must
+    be performed inside a tmux session called "shared".
+    Create the session if it does not exist.
+
+RULE 13: SINGLE INSTANCE ONLY
+    Only ONE instance of the engine can run at a time. Never run concurrent
+    or parallel engine processes. Multiple simultaneous bench runs will
+    interfere with each other's timing, causing unreliable results.
+    Always wait for the current engine process to finish before starting
+    another one.
+
+================================================================================
+BASELINE SCORE: 673/1500 (44.9%) - STS at 50ms/position
+================================================================================

@@ -1175,8 +1175,8 @@ void Evaluation::imbalance(const Board& board, int& mg, int& eg){
 }
 
 
-static AttackCache attCache;
 int Evaluation::evaluate(const Board& board, int side){
+	AttackCache attCache;
 
 	if (materialDraw(board))
 		return 0;

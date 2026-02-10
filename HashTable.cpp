@@ -5,9 +5,6 @@
 #include "MoveGen.h"
 #include <iostream>
 
-BoardState HashTable::undoList[Board::MAX_DEPTH];
-
-
 void HashTable::initHash(int size){
 	numEntries = (size * 0x100000)/sizeof(HashEntry);
 
@@ -23,8 +20,8 @@ void HashTable::initHash(int size){
     numEntries_1 = numEntries - 1;
     table = new HashEntry[numEntries];
 
-    for (int i = 0; i < numEntries; i++){
-    	table[i] = HashEntry();    	
+    for (U32 i = 0; i < numEntries; i++){
+    	table[i] = HashEntry();
     }
 
     newWrite = 0;
@@ -44,10 +41,15 @@ HashTable::HashTable(){
 
 int HashTable::probePvMove(Board& board){
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
-	assert(index >= 0 && index <= board.hashTable->numEntries_1);
-	
-	if( board.hashTable->table[index].zKey == board.zKey) {
-		return board.hashTable->table[index].move;
+	assert(index >= 0 && (U32)index <= board.hashTable->numEntries_1);
+
+	HashEntry* entry = &board.hashTable->table[index];
+	U64 d = entry->data;
+	U64 k = entry->keyXorData;
+
+	// XOR verification: recover key and check
+	if ((k ^ d) == board.zKey) {
+		return HashEntry::unpackMove(d);
 	}
 	return Move::NO_MOVE;
 }
@@ -55,28 +57,35 @@ int HashTable::probePvMove(Board& board){
 bool HashTable::probeHashEntry(Board& board, int *move, int *score, int alpha, int beta, int depth) {
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
 
-	if(board.hashTable->table[index].zKey == board.zKey) {
-		*move = board.hashTable->table[index].move;
+	HashEntry* entry = &board.hashTable->table[index];
+	U64 d = entry->data;
+	U64 k = entry->keyXorData;
 
-		if(board.hashTable->table[index].depth >= depth){
+	// XOR verification
+	if ((k ^ d) == board.zKey) {
+		*move = HashEntry::unpackMove(d);
+
+		int entryDepth = HashEntry::unpackDepth(d);
+		if (entryDepth >= depth){
 			board.hashTable->hit++;
 
-			*score = board.hashTable->table[index].score;
-			if(*score > ISMATE) 
+			*score = HashEntry::unpackScore(d);
+			if(*score > ISMATE)
 				*score -= board.ply;
-            else if(*score < -ISMATE) 
+            else if(*score < -ISMATE)
             	*score += board.ply;
 
-            switch(board.hashTable->table[index].flags) {
+            int entryFlags = HashEntry::unpackFlags(d);
+            switch(entryFlags) {
                 assert(*score >= -Search::INFINITE && *score <= Search::INFINITE);
 
-                case HFALPHA: 
+                case HFALPHA:
 	            	if(*score <= alpha) {
 	                	*score = alpha;
 	                	return true;
 	                }
 	                break;
-                case HFBETA: 
+                case HFBETA:
                 	if(*score >= beta) {
                     	*score = beta;
                     	return true;
@@ -85,7 +94,7 @@ bool HashTable::probeHashEntry(Board& board, int *move, int *score, int alpha, i
                 case HFEXACT:
                     return true;
                     break;
-                default: assert(false); 
+                default:
                 break;
             }
 		}
@@ -99,42 +108,52 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
 
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
 
-	assert(index >= 0 && index <= board.hashTable->numEntries_1);
-	//assert(depth >=1 && depth <= Board::MAX_DEPTH);
+	assert(index >= 0 && (U32)index <= board.hashTable->numEntries_1);
     assert(flags >= HFNONE && flags <= HFEXACT);
     assert(score >= -Search::INFINITE && score <= Search::INFINITE);
     assert(board.ply >=0 && board.ply < Board::MAX_DEPTH);
-	
-	if(board.hashTable->table[index].zKey == 0) {
+
+	HashEntry* entry = &board.hashTable->table[index];
+
+	// Read existing entry to check depth-preferred replacement
+	U64 oldData = entry->data;
+	U64 oldKey = entry->keyXorData;
+	U64 oldZKey = oldKey ^ oldData;
+
+	if(oldData == 0 && oldKey == 0) {
 		board.hashTable->newWrite++;
 	} else {
+		// Depth-preferred: keep deeper entries from different positions
+		int oldDepth = HashEntry::unpackDepth(oldData);
+		if (oldZKey != board.zKey && depth + 2 < oldDepth) {
+			return;
+		}
 		board.hashTable->overWrite++;
 	}
-	
-	if(score > ISMATE) 
+
+	if(score > ISMATE)
 		score += board.ply;
-    else if(score < -ISMATE) 
+    else if(score < -ISMATE)
     	score -= board.ply;
-	
-	board.hashTable->table[index].move = move;
-    board.hashTable->table[index].zKey = board.zKey;
-	board.hashTable->table[index].flags = flags;
-	board.hashTable->table[index].score = score;
-	board.hashTable->table[index].depth = depth;
+
+	U64 data = HashEntry::packData(move, score, depth, flags);
+	entry->data = data;
+	entry->keyXorData = board.zKey ^ data;
 }
 
 int HashTable::getPVLine(int depth, Board& board){
 	int move = HashTable::probePvMove(board);
 	int count = 0;
+	BoardState undoList[Board::MAX_DEPTH];
 
 	while (move != Move::NO_MOVE && count < depth){
 
 		assert(count < Board::MAX_DEPTH);
 
 		if (moveExists(board, move, board.state.currentPlayer)) {
-			BoardState undo = board.makeMove(move);			
+			BoardState undo = board.makeMove(move);
 			undoList[count] = undo;
-			board.pvArray[count++] = move;				
+			board.pvArray[count++] = move;
 		} else{
 			break;
 		}
@@ -148,7 +167,7 @@ int HashTable::getPVLine(int depth, Board& board){
 	return count;
 }
 
-bool HashTable::moveExists(Board& board, int move, int side){	
+bool HashTable::moveExists(Board& board, int move, int side){
 	int ks = board.kingSQ[side];
 	bool atCheck = MoveGen::isSquareAttacked(&board, ks, side^1);
 	MoveList moves;
@@ -165,12 +184,8 @@ bool HashTable::moveExists(Board& board, int move, int side){
 
 void HashTable::reset(){
 	for (U64 i = 0; i < numEntries; i++){
-		table[i].zKey = 0;
-	    table[i].move = 0;
-	    table[i].depth = 0;
-	    table[i].score = 0;
-	    table[i].flags = 0;
+		table[i].keyXorData = 0;
+	    table[i].data = 0;
 	}
 	newWrite = 0;
 }
-
