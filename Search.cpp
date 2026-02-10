@@ -321,7 +321,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	if (!atCheck && depth <= 5 && abs(beta) < ISMATE){
 		static_eval = Evaluation::evaluate(board, side);
 		static_set = true;
-		int rfpMargin = 100 * depth;
+		int rfpMargin = 90 * depth;
 
 		if (static_eval - rfpMargin >= beta)
 			return static_eval - rfpMargin;
@@ -334,6 +334,14 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	int R = 2 + depth/6;
 
 	if(doNull && !atCheck && board.ply > 0 && hasBigPiece && depth > R) {
+		// Eval-based: increase R when clearly winning
+		if (!static_set) {
+			static_eval = Evaluation::evaluate(board, side);
+			static_set = true;
+		}
+		if (static_eval >= beta) {
+			R += std::min((static_eval - beta) / 200, 3);
+		}
 		BoardState undo_null = board.makeNullMove();
 		score = -alphaBeta(-beta, -beta + 1, depth - R - 1, false);
 		board.undoNullMove(undo_null);
@@ -356,7 +364,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			static_eval = Evaluation::evaluate(board, side);
 			static_set = true;
 		}
-		int razorMargin = 350 + 300 * (depth - 1);
+		int razorMargin = 300 + 250 * (depth - 1);
 		if (static_eval + razorMargin < alpha) {
 			if (depth == 1) {
 				return Quiescence(alpha, beta);
