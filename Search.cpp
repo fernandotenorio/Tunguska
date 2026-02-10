@@ -487,10 +487,10 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	if (alpha != oldAlpha){
 		HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
 	} else{		
-		HashTable::storeHashEntry(board, bestMove, alpha, HFALPHA, depth);
+		HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
 	}
 
-	return alpha;
+	return bestScore;
 }
 
 int Search::Quiescence(int alpha, int beta){
