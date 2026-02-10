@@ -433,10 +433,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			&& (mv_from != Move::from(board.searchKillers[1][board.ply]) || mv_to != Move::to(board.searchKillers[1][board.ply]))
 			&& !oppAtCheck){
 				int reduce = LMR_TABLE[std::min(depth, 63)][std::min(legal, 63)];
-				// History-based adjustment: reduce less for high-history moves
-				int piece = board.board[mv_from];
-				int hist = board.searchHistory[piece][mv_to];
-				reduce -= hist / 5000;
 				reduce = std::max(reduce, 1);
 				reduce = std::min(reduce, depth - 2);
 				doReduce = true;
