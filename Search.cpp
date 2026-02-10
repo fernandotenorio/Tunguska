@@ -20,6 +20,8 @@ int Search::VICTIM_SCORES[14] = {
 
 int Search::MVV_VLA_SCORES[14][14];
 int Search::LMR_TABLE[64][64];
+int Search::counterMoves[14][64];
+int Search::moveAtPly[Board::MAX_DEPTH];
 
 void Search::initHeuristics(){
 	for (int v = 0; v < 14; v++){
@@ -58,7 +60,7 @@ void Search::checkUp(SearchInfo& info){
 }
 
 std::vector<MoveScore> Search::moveScore(Move::MAX_LEGAL_MOVES);
-void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
+void Search::orderMoves(Board& board, MoveList& moves, int pvMove, int counterMove){
 
 	int side = board.state.currentPlayer;
 
@@ -80,6 +82,8 @@ void Search::orderMoves(Board& board, MoveList& moves, int pvMove){
 				moveScore[i] = MoveScore(mv, KILLER_BONUS_0);
 			} else if (board.searchKillers[1][board.ply] == mv){
 				moveScore[i] = MoveScore(mv, KILLER_BONUS_1);
+			}else if (counterMove && mv == counterMove){
+				moveScore[i] = MoveScore(mv, COUNTER_BONUS);
 			}else{
 				int piece = board.board[Move::from(mv)];
 				int to = Move::to(mv);
@@ -137,6 +141,13 @@ void Search::clearSearch(){
 	for (int i = 0; i < 2; i++){
 		for (int j = 0; j < Board::MAX_DEPTH; j++){
 			board.searchKillers[i][j] = 0;
+		}
+	}
+
+	//clear countermoves
+	for (int i = 0; i < 14; i++){
+		for (int j = 0; j < 64; j++){
+			counterMoves[i][j] = 0;
 		}
 	}
 
@@ -376,7 +387,15 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	//Move list
 	MoveList moves;
 	MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
-	orderMoves(board, moves, pvMove);
+
+	// Get countermove for the previous move
+	int cm = Move::NO_MOVE;
+	if (board.ply > 0) {
+		int pm = moveAtPly[board.ply - 1];
+		int prevPiece = board.board[Move::to(pm)];
+		cm = counterMoves[prevPiece][Move::to(pm)];
+	}
+	orderMoves(board, moves, pvMove, cm);
 
 	int legal = 0;
 	int oldAlpha = alpha;
@@ -395,7 +414,10 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		*/		
 		BoardState undo = board.makeMove(moves.get(i));
 		if (!undo.valid)
-			continue;		
+			continue;
+
+		// Track move at ply for countermove heuristic
+		moveAtPly[board.ply - 1] = moves.get(i);
 
 		legal++;
 		bool oppAtCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, side);
@@ -470,6 +492,13 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 					if (capt == 0 && !ep){
 						board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
 						board.searchKillers[0][board.ply] = moves.get(i);
+
+						// Countermove: store this cutoff move as counter to parent's move
+						if (board.ply > 0) {
+							int pm = moveAtPly[board.ply - 1];
+							int prevPiece = board.board[Move::to(pm)];
+							counterMoves[prevPiece][Move::to(pm)] = moves.get(i);
+						}
 					}
 					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
 					return beta;
