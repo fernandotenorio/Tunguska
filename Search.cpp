@@ -201,6 +201,23 @@ int Search::search(bool verbose){
 		
 	}
 
+	// Safety: if no move found (e.g., search stopped during depth 1), pick first legal move
+	if (bestMove == Move::NO_MOVE) {
+		int side = board.state.currentPlayer;
+		int opp = side ^ 1;
+		bool atCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], opp);
+		MoveList moves;
+		MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
+		for (int i = 0; i < moves.size(); i++) {
+			BoardState undo = board.makeMove(moves.get(i));
+			if (undo.valid) {
+				board.undoMove(moves.get(i), undo);
+				bestMove = moves.get(i);
+				break;
+			}
+		}
+	}
+
 	if (verbose)
 		std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
 	return bestMove;
