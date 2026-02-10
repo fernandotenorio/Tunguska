@@ -237,6 +237,7 @@ int Search::aspirationWindow(Board* board, int depth, int score){
         }
 
         if(f >= beta) {
+            alpha = (alpha + beta)/2;
             beta = std::min(MATE_SCORE, beta + delta);
             evalType = lowerbound;
         }
