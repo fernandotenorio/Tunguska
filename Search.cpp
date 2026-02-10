@@ -587,9 +587,14 @@ int Search::Quiescence(int alpha, int beta){
 	int legal = 0;
 	int oldAlpha = alpha;
 	score = -INFINITE;
-	
+
+	// Get previous move's target square for recapture detection
+	int prevTo = -1;
+	if (board.ply > 0)
+		prevTo = Move::to(moveAtPly[board.ply - 1]);
+
 	//U64 pinned = MoveGen::pinnedBB(&board, side, ks);
-	
+
 	//Loop through captures
 	for (int i = 0; i < moves.size(); i++){
 
@@ -600,11 +605,13 @@ int Search::Quiescence(int alpha, int beta){
 
 		//legal++;
 
-		//Delta cutoff (disable if endgame)
+		//Delta cutoff (disable if endgame) - exempt recaptures
 		int capt = Move::captured(moves.get(i));
 		int promo = Move::promoteTo(moves.get(i));
+		int moveTo = Move::to(moves.get(i));
 
-		if ((stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&			
+		if (moveTo != prevTo &&
+			(stand_pat +  abs(Evaluation::PIECE_VALUES[capt]) + 200 < alpha) && !atCheck &&
 			(board.material[opp] - Evaluation::KING_VAL - abs(Evaluation::PIECE_VALUES[capt]) > ENDGAME_MAT) && (promo == 0)) {
 			continue;
 		}
@@ -619,6 +626,7 @@ int Search::Quiescence(int alpha, int beta){
 		if (!undo.valid)
 			continue;
 
+		moveAtPly[board.ply - 1] = moves.get(i);
 		legal++;
 
 		score = -Quiescence(-beta, -alpha);
