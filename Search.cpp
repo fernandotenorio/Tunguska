@@ -610,10 +610,10 @@ int Search::Quiescence(int alpha, int beta){
 		}
 		//Delta cutoff
 
-		//bad captures
-		if (!promo && !atCheck && isBadCapture(board, moves.get(i), side)){
-			continue;
-		}
+		//bad captures (disabled - testing)
+		//if (!promo && !atCheck && isBadCapture(board, moves.get(i), side)){
+		//	continue;
+		//}
 
 		BoardState undo = board.makeMove(moves.get(i));
 		if (!undo.valid)
