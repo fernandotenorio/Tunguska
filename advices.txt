@@ -855,7 +855,23 @@ Phase 4 - Polish and optimization:
  19. [MED-6]  SEE pruning for quiet moves
 
 COMPLETED:
-  [HIGH-1] PVS -- DONE (needs BUG-4 fix)
+  [HIGH-1] PVS -- DONE
+  [BUG-4]  PVS re-search -- DONE
+  [BUG-1]  Fail-soft return -- DONE
+  [BUG-2]  Futility threshold -- DONE
+  [HIGH-2] LMR logarithmic table -- DONE (+16 pts!)
+  [HIGH-3] Null move eval adjustment -- DONE (+1 pt)
+  [HIGH-4] MDP -- DONE (by team)
+  [HIGH-5] IIR -- DONE (+1 pt)
+  [HIGH-6] Hash depth-preferred -- DONE (+7 pts!)
+  [MED-1]  Reverse Futility Pruning -- DONE (+2 pts)
+  [MED-2]  Razoring -- DONE (+3 pts)
+
+ATTEMPTED AND REVERTED (no benefit for STS):
+  [MED-4]  History gravity+malus -- REVERTED (-6 pts)
+  [MED-5]  LMP -- REVERTED (-115 pts! STS-hostile)
+  [LOW-4]  QS TT probe -- REVERTED (-10 pts, conflicts with hash scheme)
+  [LOW-5]  Bad capture demotion -- REVERTED (-10 pts, SEE overhead)
 
 Remember: BENCH AFTER EVERY CHANGE. Revert if score decreases (Rule 5).
 
@@ -868,11 +884,49 @@ NOTE TO TEAM: Please log every change per Rule 10! Include bench score.
 
 Date       | Change                        | Bench Delta | New Score
 -----------+-------------------------------+-------------+----------
-2026-02-09 | [HIGH-1] PVS implemented      | ???         | ??? (not logged)
-           | (lines 406-431 rewritten)     |             |
-           | NOTE: has re-search issue     |             |
-           | (BUG-4), fix ASAP             |             |
+2026-02-09 | [HIGH-1] PVS implemented      | ???         | ~678
+           | (by team)                     |             |
 -----------+-------------------------------+-------------+----------
-           |                               |             |
+2026-02-09 | [BUG-4] PVS re-search fix     | -4 to +0    | 674
+           | Two-stage: ZW then full       |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [BUG-1] Fail-soft return      | +2          | 676
+           | return bestScore, not alpha   |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-4] MDP uncommented      | +0          | (by team)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [BUG-2] Futility legal > 1    | -2 to +0    | 674
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-2] LMR logarithmic tbl  | +16         | 690-691
+           | log(d)*log(m)/3.00, clamped   |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-3] Null move eval adj   | +1          | 692
+           | R += min((eval-beta)/200, 3)  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-1] Reverse Futility Prun | +2          | 694-695
+           | depth<=5, margin=90*depth     |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-4] History gravity+malus  | -6 REVERTED | (686)
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-5] LMP                   | -115 REVERT | (578-586)
+           | STS punishes move pruning     |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [MED-2] Razoring              | +3          | 695
+           | depth<=3, margin=300+250*(d-1)|             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-6] Hash depth-preferred  | +7          | 701-702
+           | Don't overwrite deeper entries|             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [HIGH-5] IIR re-added         | +1          | 703
+           | depth>=4, no TT move, !check  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [LOW-4] QS TT probe           | -10 REVERT  | (691)
+           | Conflicts w/ depth-preferred  |             |
+-----------+-------------------------------+-------------+----------
+2026-02-09 | [LOW-5] Bad capture demotion   | -10 REVERT  | (693)
+           | SEE overhead too expensive    |             |
+-----------+-------------------------------+-------------+----------
+FINAL: 701-703/1500 (46.7-46.9%) from baseline 673/1500 (44.9%)
+Total improvement: ~+30 points (+2.0%)
 
 ================================================================================

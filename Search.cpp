@@ -298,17 +298,22 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return score;
 	}
 
-	//Eval pruning
+	// Internal Iterative Reduction
+	if (depth >= 4 && pvMove == Move::NO_MOVE && !atCheck) {
+		depth--;
+	}
+
+	//Reverse Futility Pruning
 	int static_eval = 0;
 	bool static_set = false;
 
-	if (!pvMove && depth < 3 && !atCheck && abs(beta - 1) > -INFINITE + 100){
-		static_eval =  Evaluation::evaluate(board, side);
+	if (!atCheck && depth <= 5 && abs(beta) < ISMATE){
+		static_eval = Evaluation::evaluate(board, side);
 		static_set = true;
-		int eval_margin = 120 * depth;
+		int rfpMargin = 90 * depth;
 
-		if (static_eval - eval_margin >= beta)
-			return static_eval - eval_margin;			
+		if (static_eval - rfpMargin >= beta)
+			return static_eval - rfpMargin;
 	}
 
 	//null move pruning
@@ -318,6 +323,14 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	int R = 2 + depth/6;
 
 	if(doNull && !atCheck && board.ply > 0 && hasBigPiece && depth > R) {
+		// Eval-based: increase R when clearly winning
+		if (!static_set) {
+			static_eval = Evaluation::evaluate(board, side);
+			static_set = true;
+		}
+		if (static_eval >= beta) {
+			R += std::min((static_eval - beta) / 200, 3);
+		}
 		BoardState undo_null = board.makeNullMove();
 		score = -alphaBeta(-beta, -beta + 1, depth - R - 1, false);
 		board.undoNullMove(undo_null);
@@ -332,39 +345,24 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 	//null move pruning
 
-	/*
-	int ReverseFutilityStep = 90;
-	//Reverse futility pruning
-    if(!pvMove && !atCheck && depth <= 7 && static_eval - ReverseFutilityStep * depth > beta) {
-        return static_eval;
-    }
-    */
+	//Reverse futility pruning (now implemented above)
 
 	//Razoring pruning
-	/*
-	//if (pvMove == Move::NO_MOVE && depth <= 4 && !atCheck && doNull){
-	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck && doNull){
-		static_eval = static_set ? static_eval : Evaluation::evaluate(board, side);
-		static_set = true;
-
-		//ou
-		int RazorMargin = 300;		
-		if (static_eval + RazorMargin * depth < alpha){
-			return Quiescence(alpha, beta);			
+	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck){
+		if (!static_set) {
+			static_eval = Evaluation::evaluate(board, side);
+			static_set = true;
 		}
-		
-		//ou
-		int threshold = alpha - 300 - (depth - 1) * 60;
-		if (static_eval < threshold){
+		int razorMargin = 300 + 250 * (depth - 1);
+		if (static_eval + razorMargin < alpha) {
+			if (depth == 1) {
+				return Quiescence(alpha, beta);
+			}
 			int val = Quiescence(alpha, beta);
-
-			if (val < threshold)
-				return alpha;
+			if (val < alpha)
+				return val;
 		}
 	}
-	//end of Razoring pruning
-	*/
-
 	//Futility pruning
 	bool f_prune = false;
 	if (depth <= 3 && !atCheck && abs(alpha) < 9000){
@@ -388,7 +386,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 
 	//pinned
 	//U64 pinned = MoveGen::pinnedBB(&board, side, kingSQ);
-	
+
 	//Loop through moves
 	for (int i = 0; i < moves.size(); i++){
 		/*
@@ -406,7 +404,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		int mv_to = Move::to(tmp_mv);
 
 		//Futility pruning
-		if (f_prune && legal > 0 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
+		if (f_prune && legal > 1 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
 			board.undoMove(tmp_mv, undo);
 			continue;
 		}
@@ -420,7 +418,9 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			&& (mv_from != Move::from(board.searchKillers[0][board.ply]) || mv_to != Move::to(board.searchKillers[0][board.ply]))
 			&& (mv_from != Move::from(board.searchKillers[1][board.ply]) || mv_to != Move::to(board.searchKillers[1][board.ply]))
 			&& !oppAtCheck){
-				int reduce = legal > 6 ? 2 : 1;
+				int reduce = LMR_TABLE[std::min(depth, 63)][std::min(legal, 63)];
+				reduce = std::max(reduce, 1);
+				reduce = std::min(reduce, depth - 2);
 				doReduce = true;
 				score = -alphaBeta(-alpha - 1, -alpha, depth - 1 - reduce, true);
 		}
@@ -437,7 +437,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		if (score > alpha && doReduce) {
 			score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
 		}
-		// Full-window re-search only if score is within (alpha, beta)
+		// Full-window re-search if ZW failed high within (alpha, beta)
 		if (score > alpha && score < beta && (doReduce || doPVS)){
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
@@ -470,8 +470,8 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 					if (capt == 0 && !ep){
 						board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
 						board.searchKillers[0][board.ply] = moves.get(i);
-					}					
-					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);					
+					}
+					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
 					return beta;
 				}
 				alpha = score;
@@ -502,11 +502,11 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	//Hash table
 	if (alpha != oldAlpha){
 		HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
-	} else{		
-		HashTable::storeHashEntry(board, bestMove, alpha, HFALPHA, depth);
+	} else{
+		HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
 	}
 
-	return alpha;
+	return bestScore;
 }
 
 int Search::Quiescence(int alpha, int beta){
@@ -528,14 +528,14 @@ int Search::Quiescence(int alpha, int beta){
 	int ks = board.kingSQ[side];
 	bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
 
-	if (board.ply > Board::MAX_DEPTH - 1){		
+	if (board.ply > Board::MAX_DEPTH - 1){
 		return Evaluation::evaluate(board, side);
 	}
 
 	int score = Evaluation::evaluate(board, side);
 	int stand_pat = score;
 
-	if (!atCheck){		
+	if (!atCheck){
 		if (score >= beta){
 			return beta;
 		}

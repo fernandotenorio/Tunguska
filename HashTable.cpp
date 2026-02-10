@@ -105,22 +105,28 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
     assert(score >= -Search::INFINITE && score <= Search::INFINITE);
     assert(board.ply >=0 && board.ply < Board::MAX_DEPTH);
 	
-	if(board.hashTable->table[index].zKey == 0) {
+	HashEntry* entry = &board.hashTable->table[index];
+
+	if(entry->zKey == 0) {
 		board.hashTable->newWrite++;
 	} else {
+		// Depth-preferred: keep deeper entries from different positions
+		if (entry->zKey != board.zKey && depth + 2 < entry->depth) {
+			return;
+		}
 		board.hashTable->overWrite++;
 	}
-	
-	if(score > ISMATE) 
+
+	if(score > ISMATE)
 		score += board.ply;
-    else if(score < -ISMATE) 
+    else if(score < -ISMATE)
     	score -= board.ply;
-	
-	board.hashTable->table[index].move = move;
-    board.hashTable->table[index].zKey = board.zKey;
-	board.hashTable->table[index].flags = flags;
-	board.hashTable->table[index].score = score;
-	board.hashTable->table[index].depth = depth;
+
+	entry->move = move;
+    entry->zKey = board.zKey;
+	entry->flags = flags;
+	entry->score = score;
+	entry->depth = depth;
 }
 
 int HashTable::getPVLine(int depth, Board& board){
