@@ -4,6 +4,7 @@
 #include "Move.h"
 #include "Evaluation.h"
 #include <algorithm>
+#include <cmath>
 #include "HashTable.h"
 
 
@@ -11,18 +12,25 @@ const int Search::INFINITE = 30000;
 static const int MATE_SCORE = 29999;
 
 int Search::VICTIM_SCORES[14] = {
-		0, 0, 
+		0, 0,
 		Evaluation::PAWN_VAL, Evaluation::PAWN_VAL, Evaluation::KNIGHT_VAL, Evaluation::KNIGHT_VAL,
 		Evaluation::BISHOP_VAL, Evaluation::BISHOP_VAL, Evaluation::ROOK_VAL, Evaluation::ROOK_VAL,
 		Evaluation::QUEEN_VAL, Evaluation::QUEEN_VAL, Evaluation::KING_VAL, Evaluation::KING_VAL
 		};
 
 int Search::MVV_VLA_SCORES[14][14];
-		
+int Search::LMR_TABLE[64][64];
+
 void Search::initHeuristics(){
 	for (int v = 0; v < 14; v++){
 		for (int a = 0; a < 14; a++){
 			MVV_VLA_SCORES[v][a] = VICTIM_SCORES[v] + 6 - (VICTIM_SCORES[a]/100);
+		}
+	}
+	// Initialize LMR reduction table with logarithmic formula
+	for (int d = 1; d < 64; d++){
+		for (int m = 1; m < 64; m++){
+			LMR_TABLE[d][m] = (int)(0.5 + log(d) * log(m) / 3.00);
 		}
 	}
 }
@@ -251,20 +259,20 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 
 
 	//Mate Distance Pruning
-    // int mate_val = MATE_SCORE - board.ply;
-    // if(mate_val < beta) {
-    //     beta = mate_val;
-    //     if(alpha >= mate_val) {        	
-    //         return mate_val;
-    //     }
-    // }
-    // mate_val = -MATE_SCORE + board.ply;
-    // if(mate_val > alpha) {
-    //     alpha = mate_val;
-    //     if(beta <= mate_val) {
-    //         return mate_val;
-    //     }
-    // }
+    int mate_val = MATE_SCORE - board.ply;
+    if(mate_val < beta) {
+        beta = mate_val;
+        if(alpha >= mate_val) {
+            return mate_val;
+        }
+    }
+    mate_val = -MATE_SCORE + board.ply;
+    if(mate_val > alpha) {
+        alpha = mate_val;
+        if(beta <= mate_val) {
+            return mate_val;
+        }
+    }
 
 	//Check extension
 	int side = board.state.currentPlayer;
@@ -290,9 +298,9 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return score;
 	}
 
-	//Eval pruning 
+	//Eval pruning
 	int static_eval = 0;
-	bool static_set = false;	
+	bool static_set = false;
 
 	if (!pvMove && depth < 3 && !atCheck && abs(beta - 1) > -INFINITE + 100){
 		static_eval =  Evaluation::evaluate(board, side);
@@ -404,27 +412,35 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		}
 
 		bool doReduce = false;
+		bool doPVS = (legal > 1) && (pvMove != Move::NO_MOVE);
 
-		/* LMR TODO FIX */
+		// LMR + PVS
 		if (depth > 3 && legal > 3 && (!atCheck) &&
-			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0  
+			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0
 			&& (mv_from != Move::from(board.searchKillers[0][board.ply]) || mv_to != Move::to(board.searchKillers[0][board.ply]))
 			&& (mv_from != Move::from(board.searchKillers[1][board.ply]) || mv_to != Move::to(board.searchKillers[1][board.ply]))
 			&& !oppAtCheck){
-				//int reduce = legal > 6 ? int(depth/3) : 2;
 				int reduce = legal > 6 ? 2 : 1;
 				doReduce = true;
-				score = -alphaBeta(-beta, -alpha, depth - 1 - reduce, true);
+				score = -alphaBeta(-alpha - 1, -alpha, depth - 1 - reduce, true);
 		}
-		else {//no LMR			
+		else if (doPVS) {
+			// PVS: zero-window for non-first moves when we have PV move
+			score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+		}
+		else {
+			// Full window search
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
 
-		//re-search
-		if (score > alpha && doReduce){
+		// LMR fail-high: re-search at full depth with zero-window
+		if (score > alpha && doReduce) {
+			score = -alphaBeta(-alpha - 1, -alpha, depth - 1, true);
+		}
+		// Full-window re-search only if score is within (alpha, beta)
+		if (score > alpha && score < beta && (doReduce || doPVS)){
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
-		/* LMR TODO FIX */
 
 		board.undoMove(moves.get(i), undo);
 

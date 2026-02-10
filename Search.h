@@ -56,6 +56,7 @@ class Search{
 		static const int INFINITE;
 		//static const int MATE = 29000;
 		static const int ENDGAME_MAT = 1779;
+		static int LMR_TABLE[64][64];
 		
 		void stop();
 		static void initHeuristics();

@@ -1,0 +1,77 @@
+================================================================================
+TUNGUSKA CHESS ENGINE - IMPROVEMENT ATTEMPTS LOG
+================================================================================
+Baseline: 673/1500 (44.9%)
+
+ATTEMPT 1: PVS (Principal Variation Search) - ALL moves zero-window
+    Change: After first legal move, all subsequent moves searched with zero-window
+            [-alpha-1, -alpha], re-search with full window on fail-high.
+    Result: 668/1500 (44.5%) - FAILED (-5)
+    Why: PVS without a reliable PV move causes too many re-searches.
+         Without a strong first move from the TT, most zero-window searches
+         fail high, requiring expensive re-searches that waste time at 50ms/pos.
+    Action: REVERTED
+
+ATTEMPT 2: PVS (Principal Variation Search) - only with hash move
+    Change: Same as PVS but only use zero-window when we have a hash/PV move
+            (pvMove != NO_MOVE). This ensures the first move is likely best.
+    Result: 677/1500 (45.1%) - SUCCESS (+4)
+    Why: With a hash move from TT, the first move IS usually best, so zero-window
+         searches for subsequent moves produce cutoffs efficiently.
+    Action: KEPT
+
+ATTEMPT 3: Mate Distance Pruning (MDP)
+    Change: Uncommented existing MDP code that tightens alpha-beta window when
+            a forced mate distance is known.
+    Result: 679/1500 (45.3%) - SUCCESS (+2 additional)
+    Why: Safe pruning that narrows window for mate sequences. Helps in tactical
+         positions without any risk of missing better moves.
+    Action: KEPT
+
+ATTEMPT 4: Internal Iterative Reductions (IIR)
+    Change: When no hash move available and depth > 3, reduce depth by 1.
+    Result: 672/1500 (44.8%) - FAILED (-7 from 679)
+    Why: At short time controls (50ms), IIR reduces depth too aggressively when
+         no hash move exists. The engine needs those extra plies to find the
+         right move. IIR is more effective at longer time controls where the
+         speed/depth tradeoff is favorable.
+    Action: REVERTED
+
+ATTEMPT 5: Aggressive Null Move Pruning (R = 3 + depth/3)
+    Change: Increased null move reduction from R = 2 + depth/6 to R = 3 + depth/3.
+    Result: 649/1500 (43.3%) - FAILED (-30 from 679)
+    Why: Way too aggressive. The high reduction means the null-move verification
+         search is too shallow, causing false cutoffs in positions where the
+         opponent has strong tactical threats. The original R formula is well-tuned
+         for this engine's evaluation and time control.
+    Action: REVERTED
+
+ATTEMPT 6: Moderate Null Move Pruning (R = 2 + depth/4)
+    Change: Slightly increased from R = 2 + depth/6 to R = 2 + depth/4.
+    Result: 649/1500 (43.3%) - FAILED (-30 from 679)
+    Why: Even this moderate increase is too much. The engine's evaluation is not
+         accurate enough at low depths to support more aggressive null-move cuts.
+         The existing R = 2 + depth/6 is well-calibrated.
+    Action: REVERTED
+
+ATTEMPT 7: LMR with logarithmic tables (R = 0.75 + ln(d)*ln(m)/2.25)
+    Change: Replaced flat LMR reductions (1 or 2) with a logarithmic table.
+    Result: 637/1500 (42.5%) - FAILED (-42 from 679)
+    Why: The logarithmic formula reduces WAY too much for later moves. At depth 10
+         with move 20, the reduction is ~4 plies, which is too aggressive. Combined
+         with PVS zero-window, many important moves are searched too shallow and
+         then require expensive re-searches.
+    Action: REVERTED
+
+ATTEMPT 8: LMR with conservative logarithmic (R = 0.5 + ln(d)*ln(m)/3.0)
+    Change: More conservative logarithmic LMR formula.
+    Result: 621/1500 (41.4%) - FAILED (-58 from 679)
+    Why: Even with reduced coefficients, the logarithmic scaling still over-reduces
+         at the depths this engine typically reaches (6-10). The flat reduction
+         of 1-2 is actually well-suited for the engine's search characteristics.
+    Action: REVERTED
+
+================================================================================
+CURRENT BEST: ~679/1500 (45.3%) with PVS + MDP
+Improvement over baseline: +6 points (+0.4%)
+================================================================================
