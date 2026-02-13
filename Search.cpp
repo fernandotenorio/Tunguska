@@ -245,7 +245,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return 0;
 	}
 
-	if (board.ply > Board::MAX_DEPTH - 1){		
+	if (board.ply >= Board::MAX_DEPTH - 1){		
 		return Evaluation::evaluate(board, board.state.currentPlayer);
 	}
 
@@ -503,18 +503,19 @@ int Search::Quiescence(int alpha, int beta){
 
 	info.nodes++;
 	
-	if (board.state.halfMoves >= 100 || board.isRepetition()){		
+	if ((board.state.halfMoves >= 100 || board.isRepetition()) && board.ply > 0){		
 		return 0;
 	}
-	
+
 	int side = board.state.currentPlayer;
+
+	if (board.ply >= Board::MAX_DEPTH - 1){		
+		return Evaluation::evaluate(board, side);
+	}
+	
 	int opp = side^1;
 	int ks = board.kingSQ[side];
 	bool atCheck = MoveGen::isSquareAttacked(&board, ks, opp);
-
-	if (board.ply > Board::MAX_DEPTH - 1){		
-		return Evaluation::evaluate(board, side);
-	}
 
 	int score = Evaluation::evaluate(board, side);
 	int stand_pat = score;
@@ -530,11 +531,7 @@ int Search::Quiescence(int alpha, int beta){
 	}
 
 	MoveList moves;
-	/*
-	MoveGen::pseudoLegalCaptureMoves(&board, side, moves);
-	//true arg: only quiet promotions, capture promotions are already in pseudoLegalCaptures
-	MoveGen::pawnPromotions(&board, side, moves, true);
-	*/
+	
 	
 	if (atCheck){		
 		U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
@@ -555,13 +552,6 @@ int Search::Quiescence(int alpha, int beta){
 	
 	//Loop through captures
 	for (int i = 0; i < moves.size(); i++){
-
-		/*
-		if (!MoveGen::isLegalMove(&board, moves.get(i), side, atCheck, pinned))
-			continue;
-		*/
-
-		//legal++;
 
 		//Delta cutoff (disable if endgame)
 		int capt = Move::captured(moves.get(i));
@@ -607,10 +597,9 @@ int Search::Quiescence(int alpha, int beta){
 	
 	if (legal == 0){
 		if (atCheck){
-			return -INFINITE + board.ply;
+			return -MATE_SCORE + board.ply;
 		} 
 	}
-
 	return alpha;
 }
 
@@ -644,75 +633,73 @@ U64 considerXrays(const Board* board, U64 occu, U64 attackdef, int sq) {
 
 	U64 att = (Magic::rookAttacksFrom(occu, sq) & rookQueens) | (Magic::bishopAttacksFrom(occu, sq) & bishopQueens);
 	return att & occu;
-
-	/*
-	// right, up, left, down
-	for (int dir = 0; dir < 4; dir++){		
-		if(!(attackdef & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]) && (occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq])) {
-			int n;
-			if (dir >= 2)
-        		n = numberOfLeadingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
-        	else
-        		n = numberOfTrailingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
-        	return BitBoardGen::SQUARES[n] & rookQueens;
-		}
-	}
-
-	U64 bishopQueens = board->bitboards[Board::WHITE_BISHOP] | board->bitboards[Board::WHITE_QUEEN] |
-					   board->bitboards[Board::BLACK_BISHOP] | board->bitboards[Board::BLACK_QUEEN];
-
-	// up right, up left, down left, down right
-	for (int dir = 4; dir < 8; dir++){		
-		if(!(attackdef & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]) && (occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq])) {
-			int n;
-			if (dir >= 6)       	
-        		n = numberOfLeadingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
-        	else
-        		n = numberOfTrailingZeros(occu & BitBoardGen::BITBOARD_DIRECTIONS[dir][sq]);
-        	return BitBoardGen::SQUARES[n] & bishopQueens;
-		}
-	}
-	return 0;
-	*/
 }
 
-//54.67% +/- 1.51% only at quiesce 2857 games
-int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece){
-	int gain[32];
-	int d = 0;
-	int color = board->state.currentPlayer;
-	U64 mayXray = board->bitboards[Board::WHITE_PAWN] | board->bitboards[Board::BLACK_PAWN] | 
-				  board->bitboards[Board::WHITE_BISHOP] | board->bitboards[Board::BLACK_BISHOP] |
-				  board->bitboards[Board::WHITE_ROOK] | board->bitboards[Board::BLACK_ROOK] |
-				  board->bitboards[Board::WHITE_QUEEN] | board->bitboards[Board::BLACK_QUEEN];		
+//see gemini3
+int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece) {
+    // Array to store score at each depth
+    int gain[32];
+    int d = 0;
 
-	U64 fromSet = (BitBoardGen::ONE << fromSq);
-	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
-	U64 attadef = MoveGen::attackers_to(board, toSq, Board::WHITE) | MoveGen::attackers_to(board, toSq, Board::BLACK);	
-	gain[d] = abs(Evaluation::PIECE_VALUES[target]);
+    // Initial gain is the value of the piece sitting on the target square
+    gain[d] = abs(Evaluation::PIECE_VALUES[target]);
 
-	do {
-		d++;		
-		gain[d] = abs(Evaluation::PIECE_VALUES[aPiece]) - gain[d - 1];
+    int side = board->state.currentPlayer;
+    U64 fromSet = (BitBoardGen::ONE << fromSq);
 
-		if(std::max(-gain[d - 1], gain[d]) < 0) {
+    // All pieces on the board
+    U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
+
+    // Calculate initial attackers
+    U64 attadef = MoveGen::attackers_to(board, toSq, Board::WHITE)
+        | MoveGen::attackers_to(board, toSq, Board::BLACK);
+
+    // X-Ray optimizations (update these only when necessary)
+    // You can keep your considerXrays function, it is logically correct.
+
+    do {
+        d++;
+
+        // 1. Calculate gain for this depth
+        // value of the piece that just moved - previous gain
+        gain[d] = abs(Evaluation::PIECE_VALUES[aPiece]) - gain[d - 1];
+
+        // 2. Pruning
+        // If the side to move is already losing material even if they stop now, 
+        // they will just stand pat. We can cut off here.
+        if (std::max(-gain[d - 1], gain[d]) < 0) {
             break;
         }
-        attadef^= fromSet;
-        occup^= fromSet;
 
-        if(fromSet & mayXray) {
-            attadef|= considerXrays(board, occup, attadef, toSq);
-        }                
+        // 3. Update Board State (Simulation)
+        attadef ^= fromSet; // Remove the attacker from the list
+        occup ^= fromSet;   // Remove the piece from the board
 
-        color = !color;
-        fromSet = getLeastValuablePiece(board, attadef, color, aPiece);        
-	} while(fromSet);
+        // 4. Update X-Rays
+        // CRITICAL FIX: We generally always check for X-rays because ANY piece can block.
+        // Optimization: Only check if the piece that moved is aligned with the target.
+        // If you have LINES_BB initialized:
+         if (BitBoardGen::LINES_BB[fromSq][toSq]) {
+            attadef |= considerXrays(board, occup, attadef, toSq);
+         }
+        // If not, just call considerXrays unconditionally. It is safer.
 
-	while (--d)  {
-        gain[d - 1]= -std::max(-gain[d - 1], gain[d]);
+        // 5. Switch Side & Find Next Attacker
+        side ^= 1;
+
+        // Pass aPiece by reference (&). getLeastValuablePiece will update it 
+        // to the type of the NEXT attacker (e.g., from Pawn to Rook).
+        fromSet = getLeastValuablePiece(board, attadef, side, aPiece);
+
+        // 'fromSq' is only needed if you use LINES_BB optimization above
+        fromSq = numberOfTrailingZeros(fromSet); 
+
+    } while (fromSet);
+
+    // Propagate minimax scores back to the root
+    while (--d) {
+        gain[d - 1] = -std::max(-gain[d - 1], gain[d]);
     }
     return gain[0];
 }
-
 
