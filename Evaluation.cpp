@@ -1191,7 +1191,7 @@ int Evaluation::evaluate(const Board& board, int side){
 	pieceSquaresBalance(board, mg, eg);	
 	pieceOpenFile(board, mg, eg);
 	kingAttack(board, mg, &attCache);
-	//kingTropism(board, mg);
+	kingTropism(board, mg);
 	evalPawns(board, mg, eg, &attCache);
 	kingShelter(board, mg);
 	evalBishops(board, mg, eg);
