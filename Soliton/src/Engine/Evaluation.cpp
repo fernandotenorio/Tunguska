@@ -630,6 +630,44 @@ void Evaluation::outposts(const Board& board, EvalInfo& ei, int&mg, int&eg){
 	}
 }
 
+static const int king_shelter_bonus1 = 8;
+static const int king_shelter_bonus2 = 4;
+//one sq ahead region
+static const int king_shelter_attacked_penalty1[] = {0, 0, -16, -48};
+//two squares ahead region
+static const int king_shelter_attacked_penalty2[] = {0, 0, -8, -24};
+//opp connected pawns attacking shelter
+static const int king_connected_attack_penalty = -5;
+
+void Evaluation::kingShelter(const Board& board, int& mg){
+	
+	int s = 1;
+	for (int side = 0; side < 2; side++){
+		
+		int opp = side^1;
+		int ks = board.kingSQ[side];
+		U64 front1 = BitBoardGen::BITBOARD_KING_AHEAD[side][ks][0];
+		U64 front2 = BitBoardGen::BITBOARD_KING_AHEAD[side][ks][1];
+		U64 myPawns = board.bitboards[Board::PAWN | side];
+		U64 oppPawns = board.bitboards[Board::PAWN | opp];
+		
+		//defense pawns
+		U64 shelter = front1 & myPawns;
+		mg+= s * BitBoardGen::popCount(shelter) * king_shelter_bonus1;
+		
+		shelter = front2 & myPawns;
+		mg+= s * BitBoardGen::popCount(shelter) * king_shelter_bonus2;
+		
+		//enemy pawns
+		U64 oppPawnsAttacking = 0;
+		shelter = front1 & oppPawns;
+		oppPawnsAttacking|= shelter;
+		mg+= s * king_shelter_attacked_penalty1[BitBoardGen::popCount(shelter)];
+		
+		s = -1;
+	}
+}
+
 void Evaluation::initEvalInfo(const Board& board, EvalInfo& ei){
     // inits occupancy and attacks BBs
     computeAttacks(board, ei);
@@ -650,6 +688,7 @@ int Evaluation::evaluate(const Board& board) {
     pieceOpenFile(board, mg, eg);
     evalKingAttack(board, mg, ei);
     outposts(board, ei, mg, eg);
+    kingShelter(board, mg);
 
     if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = ((mg * phase) + (eg * (TOTAL_PHASE - phase))) / TOTAL_PHASE;
