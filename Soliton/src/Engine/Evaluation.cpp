@@ -668,6 +668,66 @@ void Evaluation::kingShelter(const Board& board, int& mg){
 	}
 }
 
+void Evaluation::mobility(const Board& board, EvalInfo& ei, int& mg, int& eg) {
+    int s = 1;
+    // Pre-calculated bonuses per piece per number of moves (0-27 for Queen)
+    const int KNIGHT_MOBILITY_MG[9] = {-30, -15, 0, 5, 10, 15, 18, 20, 22};
+    const int BISHOP_MOBILITY_MG[14] = {-20, -10, 0, 3, 6, 9, 12, 14, 16, 18, 20, 21, 22, 23};
+    const int ROOK_MOBILITY_MG[15]   = {-12, -6, 0, 2, 4, 6, 8, 10, 11, 12, 13, 13, 14, 14, 14};
+    const int QUEEN_MOBILITY_MG[28]  = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 18, 18};
+
+    const int KNIGHT_MOBILITY_EG[9] = {-20, -10, 0, 2, 4, 6, 8, 9, 10};
+    const int BISHOP_MOBILITY_EG[14]= {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10};
+    const int ROOK_MOBILITY_EG[15]  = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10};
+    const int QUEEN_MOBILITY_EG[28] = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 18, 18};
+    int scale = 1;
+
+    for (int side = 0; side < 2; ++side) {
+        U64 ourPieces = board.bitboards[side];
+        
+        U64 knights = board.bitboards[Board::KNIGHT | side];
+        while (knights) {
+            int sq = numberOfTrailingZeros(knights);
+            U64 moves = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[sq] & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * KNIGHT_MOBILITY_MG[count]/scale;
+            eg += s * KNIGHT_MOBILITY_EG[count]/scale;
+            knights &= knights - 1;
+        }
+
+        U64 bishops = board.bitboards[Board::BISHOP | side];
+        while (bishops) {
+            int sq = numberOfTrailingZeros(bishops);
+            U64 moves = Magic::bishopAttacksFrom(ei.occup, sq) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * BISHOP_MOBILITY_MG[count]/scale;
+            eg += s * BISHOP_MOBILITY_EG[count]/scale;
+            bishops &= bishops - 1;
+        }
+        
+        U64 rooks = board.bitboards[Board::ROOK | side];
+        while (rooks) {
+            int sq = numberOfTrailingZeros(rooks);
+            U64 moves = Magic::rookAttacksFrom(ei.occup, sq) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * ROOK_MOBILITY_MG[count]/scale;
+            eg += s * ROOK_MOBILITY_EG[count]/scale;
+            rooks &= rooks - 1;
+        }
+        
+        U64 queens = board.bitboards[Board::QUEEN | side];
+        while(queens) {
+            int sq = numberOfTrailingZeros(queens);
+            U64 moves = (Magic::rookAttacksFrom(ei.occup, sq) | Magic::bishopAttacksFrom(ei.occup, sq)) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * QUEEN_MOBILITY_MG[count]/scale;
+            eg += s * QUEEN_MOBILITY_EG[count]/scale;
+            queens &= queens - 1;
+        }
+        s = -1;
+    }
+}
+
 void Evaluation::initEvalInfo(const Board& board, EvalInfo& ei){
     // inits occupancy and attacks BBs
     computeAttacks(board, ei);
@@ -689,6 +749,7 @@ int Evaluation::evaluate(const Board& board) {
     evalKingAttack(board, mg, ei);
     outposts(board, ei, mg, eg);
     kingShelter(board, mg);
+    mobility(board, ei, mg, eg);
 
     if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = ((mg * phase) + (eg * (TOTAL_PHASE - phase))) / TOTAL_PHASE;

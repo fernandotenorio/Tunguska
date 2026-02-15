@@ -88,6 +88,7 @@ public:
 	static int kingAttack(const Board& board, int side, EvalInfo& ei);
 	static void outposts(const Board& board, EvalInfo& ei, int& mg, int& eg);
 	static void kingShelter(const Board& board, int& mg);
+	static void mobility(const Board& board, EvalInfo& ei, int& mg, int& eg);
 	static void initEvalInfo(const Board& board, EvalInfo& ei);
 	static int evaluate(const Board& board);
 
