@@ -166,6 +166,18 @@ static const int PAWN_CONNECTED_BONUS_EG[2][64] = {
      0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+// Pawn storm
+static const int STORM_MAP[64] = {
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    10, 10, 20,  0,  0, 20, 10, 10,
+    15, 20, 50, 15, 15, 50, 20, 15,
+    30, 50, 60, 50, 50, 60, 50, 30,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0
+};
+
 void Evaluation::initAll() {
     // 1. Initialize Phase Increments
     for (int i = 0; i < 14; i++) PHASE_INC[i] = 0;
@@ -215,8 +227,8 @@ void Evaluation::initAll() {
     }
 }
 
-/*Valuation Features */
-//Eval material
+/* Evaluation Features */
+// material
 void Evaluation::materialBalance(const Board& board, int& mg, int& eg){
 	mg+= board.material[Board::WHITE] - board.material[Board::BLACK];
 	eg+= board.material[Board::WHITE] - board.material[Board::BLACK];
@@ -525,7 +537,21 @@ int Evaluation::kingAttack(const Board& board, int side, EvalInfo& ei){
     attackVal+= nknights * KNIGHT_AW;
 
     //Pawn storm
-   //TODO
+    U64 kingHalf = (kingSq % 8 < 4) ? BitBoardGen::QUEENSIDE_MASK : BitBoardGen::KINGSIDE_MASK;
+    attackerPawns&= kingHalf;
+	int stormBonus = 0;
+	int nStorm = BitBoardGen::popCount(attackerPawns);
+
+    if (nStorm > 1){
+		while(attackerPawns){
+			int from = numberOfTrailingZeros(attackerPawns);
+			stormBonus+= (opp == Board::WHITE) ? STORM_MAP[from] : STORM_MAP[MIRROR64[from]];
+			attackerPawns&= attackerPawns - 1;
+		}
+	}
+
+    // two or more pawns
+    attackVal+= stormBonus;
     numAttackers = numAttackers > 7 ? 7 : numAttackers;
     attackVal*= ATTACK_W[numAttackers];
     return attackVal/150;
