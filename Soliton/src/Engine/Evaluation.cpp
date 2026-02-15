@@ -119,6 +119,17 @@ static const int Q_SOPEN_EG = 4;
 static const int OPENFILES_BONUS_MG[2][2] = {{R_OPEN_MG, R_SOPEN_MG},{Q_OPEN_MG, Q_SOPEN_MG}}; 
 static const int OPENFILES_BONUS_EG[2][2] = {{R_OPEN_EG, R_SOPEN_EG},{Q_OPEN_EG, Q_SOPEN_EG}};
 
+// Outposts (indexed by file)
+// TODO add rank bonus?
+static const int KNIGHT_OUTPOST_BONUS_MG[8] = {2, 4, 8, 16, 16, 8, 4, 2};
+static const int KNIGHT_OUTPOST_BONUS_EG[8] = {3, 6, 10, 20, 20, 10, 6, 3};
+static const int BISHOP_OUTPOST_BONUS_MG[8] = {2, 4, 8, 16, 16, 8, 4, 2};
+static const int BISHOP_OUTPOST_BONUS_EG[8] = {3, 6, 10, 20, 20, 10, 6, 3};
+static const int KNIGHT_HOLE_BONUS_MG = 20;
+static const int KNIGHT_HOLE_BONUS_EG = 30;
+static const int BISHOP_HOLE_BONUS_MG = 15;
+static const int BISHOP_HOLE_BONUS_EG = 25;
+
 //Pawn Structure
 static const int ISOLATED_PAWN_PENALTY_MG[8] = {-5, -7, -10, -10, -10, -10, -7, -5};
 static const int ISOLATED_PAWN_PENALTY_EG[8] = {-10, -14, -20, -20, -20, -20, -14, -10};
@@ -557,6 +568,67 @@ int Evaluation::kingAttack(const Board& board, int side, EvalInfo& ei){
     return attackVal/150;
 }                                               
 
+void Evaluation::outposts(const Board& board, EvalInfo& ei, int&mg, int&eg){
+	int s = 1;
+	const int min_rank[2] = {3, 1};
+	const int max_rank[2] = {6, 4};
+
+	for (int side = 0; side < 2; side++){
+		int opp = side^1;
+
+		// Knights
+		U64 kn = board.bitboards[Board::KNIGHT | side];
+        U64 ourPawnAttacks = ei.attackInfo.pawns[side];
+		U64 enemyPawnAttacks = ei.attackInfo.pawns[opp];
+        U64 enemyPawns = board.bitboards[Board::PAWN | opp];
+        
+		while (kn){
+			int sq = numberOfTrailingZeros(kn);
+            U64 sqBB = BitBoardGen::SQUARES[sq];
+			int rank = sq >> 3;
+
+			if (rank >= min_rank[side] && rank <= max_rank[side] && (ourPawnAttacks & sqBB)){
+                if (!(enemyPawnAttacks & sqBB)){
+                    int file = sq & 7;
+					mg+= s * KNIGHT_OUTPOST_BONUS_MG[file];
+					eg+= s * KNIGHT_OUTPOST_BONUS_EG[file];
+
+                    // is it a hole?
+                    if ((BitBoardGen::ADJACENT_FILES[file] & enemyPawns) == 0){
+                        mg += s * KNIGHT_HOLE_BONUS_MG;
+                        eg += s * KNIGHT_HOLE_BONUS_EG;
+                    }
+				}
+			}			
+			kn&= kn - 1;
+		}
+
+		// Bishops
+		U64 bishops = board.bitboards[Board::BISHOP | side];
+        
+		while (bishops){
+			int sq = numberOfTrailingZeros(bishops);
+            U64 sqBB = BitBoardGen::SQUARES[sq];
+			int rank = sq >> 3;
+
+			if (rank >= min_rank[side] && rank <= max_rank[side] && (ourPawnAttacks & sqBB)){
+				if (!(enemyPawnAttacks & sqBB)){
+                    int file = sq & 7;
+					mg+= s * BISHOP_OUTPOST_BONUS_MG[file];
+					eg+= s * BISHOP_OUTPOST_BONUS_EG[file];
+
+                    // is it a hole?
+                    if ((BitBoardGen::ADJACENT_FILES[file] & enemyPawns) == 0){
+                        mg += s * BISHOP_HOLE_BONUS_MG;
+                        eg += s * BISHOP_HOLE_BONUS_EG;
+                    }
+				}
+			}
+			bishops&= bishops - 1;
+		}
+		s = -1;
+	}
+}
 
 void Evaluation::initEvalInfo(const Board& board, EvalInfo& ei){
     // inits occupancy and attacks BBs
@@ -577,6 +649,7 @@ int Evaluation::evaluate(const Board& board) {
     evalPawns(board, ei, mg, eg);
     pieceOpenFile(board, mg, eg);
     evalKingAttack(board, mg, ei);
+    outposts(board, ei, mg, eg);
 
     if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = ((mg * phase) + (eg * (TOTAL_PHASE - phase))) / TOTAL_PHASE;

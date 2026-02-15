@@ -86,6 +86,7 @@ public:
 	static void pieceOpenFile(const Board& board, int& mg, int& eg);
 	static void evalKingAttack(const Board& board, int& mg, EvalInfo& ei);
 	static int kingAttack(const Board& board, int side, EvalInfo& ei);
+	static void outposts(const Board& board, EvalInfo& ei, int& mg, int& eg);
 	static void initEvalInfo(const Board& board, EvalInfo& ei);
 	static int evaluate(const Board& board);
 
