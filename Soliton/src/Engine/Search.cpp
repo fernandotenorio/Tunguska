@@ -168,7 +168,15 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         if (!undo.valid) continue;
 
         legalMovesCount++;
-        int score = -alphaBeta(board, -beta, -alpha, depth - 1, true);
+
+        // Calculate extension
+        int extension = 0;
+        if (inCheck) {
+            extension = 1;
+        }
+
+        // Be careful: if you used LMR, 'currentDepth' or 'depth-1' becomes 'depth - 1 + extension'
+        int score = -alphaBeta(board, -beta, -alpha, depth - 1 + extension, true);
         board.undoMove(move, undo);
 
         if (params.stopped) return 0;
