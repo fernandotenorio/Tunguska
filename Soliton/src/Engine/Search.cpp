@@ -218,24 +218,44 @@ int Search::scoreMove(const Board& board, int move, int pvMove) {
 }
 
 void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply) {
-    struct MoveScore {
-        int move;
-        int score;
-    };
+    int count = moves.size();
+    
+    // 1. Stack Allocation (Instant)
+    // We use a parallel array to store scores. 
+    // This lives on the CPU stack, not the heap.
+    int scores[Move::MAX_LEGAL_MOVES]; 
 
-    std::vector<MoveScore> scoredMoves;
-    for (int i = 0; i < moves.size(); i++) {
-        scoredMoves.push_back({ moves.get(i), scoreMove(board, moves.get(i), pvMove) });
+    // 2. Score all moves
+    for (int i = 0; i < count; ++i) {
+        scores[i] = scoreMove(board, moves.get(i), pvMove);
     }
 
-    // Simple selection sort for the MoveList
-    for (int i = 0; i < moves.size(); i++) {
-        for (int j = i + 1; j < moves.size(); j++) {
-            if (scoredMoves[j].score > scoredMoves[i].score) {
-                std::swap(scoredMoves[i], scoredMoves[j]);
+    // 3. Selection Sort
+    // Finding the best move and swapping it to the front is generally 
+    // faster than std::sort for small arrays (N < 50) because it minimizes data movement.
+    for (int i = 0; i < count - 1; ++i) {
+        int bestIndex = i;
+        int bestScore = scores[i];
+
+        // Find the move with the highest score in the remaining list
+        for (int j = i + 1; j < count; ++j) {
+            if (scores[j] > bestScore) {
+                bestScore = scores[j];
+                bestIndex = j;
             }
         }
-        moves.set(i, scoredMoves[i].move);
+
+        // Swap if a better move was found
+        if (bestIndex != i) {
+            // Swap scores in our local array
+            scores[bestIndex] = scores[i];
+            scores[i] = bestScore;
+
+            // Swap moves in the actual MoveList
+            int tempMove = moves.get(i);
+            moves.set(i, moves.get(bestIndex));
+            moves.set(bestIndex, tempMove);
+        }
     }
 }
 
