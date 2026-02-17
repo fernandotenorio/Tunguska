@@ -175,7 +175,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
             extension = 1;
         }
 
-        // Be careful: if you used LMR, 'currentDepth' or 'depth-1' becomes 'depth - 1 + extension'
+        // if using LMR, 'currentDepth' or 'depth-1' becomes 'depth - 1 + extension'
         int score = -alphaBeta(board, -beta, -alpha, depth - 1 + extension, true);
         board.undoMove(move, undo);
 
