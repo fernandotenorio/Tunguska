@@ -144,10 +144,14 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     }
 
     int side = board.state.currentPlayer;
+    // Determine if we are currently in check (Evasion)
     bool inCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], side ^ 1);
 
+    // Null Move Pruning
+    // Condition: !inCheck is crucial here. Never null move while in check.
     if (doNull && !inCheck && depth >= 3 && board.material[side] > 500) {
         BoardState undo = board.makeNullMove();
+        // Standard reduction R=3
         int score = -alphaBeta(board, -beta, -beta + 1, depth - 3, false);
         board.undoNullMove(undo);
         if (params.stopped) return 0;
@@ -162,6 +166,10 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     int oldAlpha = alpha;
     int bestMove = Move::NO_MOVE;
 
+    // If we are in check, we extend the search by 1 ply to resolve the threat.
+    int extension = 0;
+    if (inCheck) extension = 1;
+
     for (int i = 0; i < moves.size(); i++) {
         int move = moves.get(i);
         BoardState undo = board.makeMove(move);
@@ -169,14 +177,49 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
         legalMovesCount++;
 
-        // Calculate extension
-        int extension = 0;
-        if (inCheck) {
-            extension = 1;
+        // LATE MOVE REDUCTION (LMR)
+        int reduction = 0;
+        
+        // Conditions for reduction:
+        // 1. Depth is substantial (> 2)
+        // 2. We have searched the best moves already (legalMovesCount > 3)
+        // 3. We are NOT in check (do not reduce evasions)
+        if (depth >= 3 && legalMovesCount > 3 && !inCheck) {
+            
+            int captured = Move::captured(move);
+            int promoted = Move::promoteTo(move);
+
+            // 4. Move is quiet (no capture, no promotion)
+            if (captured == Board::EMPTY && promoted == Board::EMPTY) {
+                
+                // 5. Move is not a Killer move
+                if (move != board.searchKillers[0][board.ply] && 
+                    move != board.searchKillers[1][board.ply]) {
+                    
+                    reduction = 1;
+                    // Reduce more for very late moves at high depth
+                    if (legalMovesCount > 10 && depth > 6) reduction = 2;
+                    
+                    // Safety clamp
+                    if (reduction > depth - 1) reduction = depth - 1;
+                }
+            }
         }
 
-        // if using LMR, 'currentDepth' or 'depth-1' becomes 'depth - 1 + extension'
-        int score = -alphaBeta(board, -beta, -alpha, depth - 1 + extension, true);
+        // Calculate final depth for this move
+        // Note: 'extension' adds depth (good for check), 'reduction' removes depth (good for bad moves)
+        int currentDepth = depth - 1 + extension - reduction;
+
+        int score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+
+        // Re-Search Logic:
+        // If we reduced the depth, and the move beat alpha (it was better than we thought),
+        // we must search it again at full depth to get the accurate score.
+        if (reduction > 0 && score > alpha) {
+            currentDepth = depth - 1 + extension; // Full depth (with extension, no reduction)
+            score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+        }
+
         board.undoMove(move, undo);
 
         if (params.stopped) return 0;
@@ -200,6 +243,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     }
 
     if (legalMovesCount == 0) {
+        // If inCheck, it's Checkmate. Score relies on Ply to prefer faster mates.
         return inCheck ? (-MATE + board.ply) : 0;
     }
 
