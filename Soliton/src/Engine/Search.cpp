@@ -217,6 +217,7 @@ int Search::scoreMove(const Board& board, int move, int pvMove) {
     return board.searchHistory[board.board[Move::from(move)]][Move::to(move)];
 }
 
+// TODO: pickNextBest, i.e., lazy sorting.
 void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply) {
     int count = moves.size();
     
