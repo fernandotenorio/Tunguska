@@ -854,7 +854,7 @@ int Evaluation::evaluate(const Board& board) {
     outposts(board, ei, mg, eg);
     kingShelter(board, mg);
     mobility(board, ei, mg, eg);
-    threats(board, mg, eg, ei);
+    //threats(board, mg, eg, ei);
 
     if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = ((mg * phase) + (eg * (TOTAL_PHASE - phase))) / TOTAL_PHASE;
