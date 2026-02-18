@@ -50,10 +50,6 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
     params.timeLimit = moveTime;
     params.depthLimit = maxDepth;
 
-    // Clear heuristics
-    memset(board.searchHistory, 0, sizeof(board.searchHistory));
-    memset(board.searchKillers, 0, sizeof(board.searchKillers));
-
     int alpha = -INFINITE;
     int beta = INFINITE;
 

@@ -38,6 +38,11 @@ Board::Board(){
 	for (int i = 0; i < 64; i++)
 		board[i] = 0;
 
+	memset(searchHistory, 0, sizeof(searchHistory));
+    memset(searchKillers, 0, sizeof(searchKillers));
+	memset(pvArray, 0, sizeof(pvArray));
+	memset(zHist, 0, sizeof(zHist));
+
 	histPly = 0;
 	ply = 0;
 }

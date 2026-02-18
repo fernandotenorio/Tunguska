@@ -37,8 +37,7 @@ void UCI::loop() {
                 board.hashTable->reset();
             }
 
-            // 2. Clear Search Heuristics
-            board.resetSearchHeuristics();
+            // New board is constructed
             board = Board::fromStartPosition();
             board.setHashTable(tt);
         }
