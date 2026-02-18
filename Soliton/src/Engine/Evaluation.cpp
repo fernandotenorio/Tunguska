@@ -130,6 +130,10 @@ static const int KNIGHT_HOLE_BONUS_EG = 30;
 static const int BISHOP_HOLE_BONUS_MG = 15;
 static const int BISHOP_HOLE_BONUS_EG = 25;
 
+// Bishop pair
+static const int BISHOP_PAIR_MG = 50;
+static const int BISHOP_PAIR_EG = 68;
+
 //Pawn Structure
 static const int ISOLATED_PAWN_PENALTY_MG[8] = {-5, -7, -10, -10, -10, -10, -7, -5};
 static const int ISOLATED_PAWN_PENALTY_EG[8] = {-10, -14, -20, -20, -20, -20, -14, -10};
@@ -188,6 +192,16 @@ static const int STORM_MAP[64] = {
     0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  0,  0,  0,  0,  0,  0
 };
+
+// King shelter
+static const int king_shelter_bonus1 = 8;
+static const int king_shelter_bonus2 = 4;
+//one sq ahead region
+static const int king_shelter_attacked_penalty1[] = {0, 0, -16, -48};
+//two squares ahead region
+static const int king_shelter_attacked_penalty2[] = {0, 0, -8, -24};
+//opp connected pawns attacking shelter
+static const int king_connected_attack_penalty = -5;
 
 void Evaluation::initAll() {
     // 1. Initialize Phase Increments
@@ -630,15 +644,6 @@ void Evaluation::outposts(const Board& board, EvalInfo& ei, int&mg, int&eg){
 	}
 }
 
-static const int king_shelter_bonus1 = 8;
-static const int king_shelter_bonus2 = 4;
-//one sq ahead region
-static const int king_shelter_attacked_penalty1[] = {0, 0, -16, -48};
-//two squares ahead region
-static const int king_shelter_attacked_penalty2[] = {0, 0, -8, -24};
-//opp connected pawns attacking shelter
-static const int king_connected_attack_penalty = -5;
-
 void Evaluation::kingShelter(const Board& board, int& mg){
 	
 	int s = 1;
@@ -832,6 +837,22 @@ void Evaluation::threats(const Board& board, int& mg, int& eg, EvalInfo& ei){
 	}
 }
 
+void Evaluation::evalBishops(const Board& board, int& mg, int& eg){
+
+	int wb_cnt = BitBoardGen::popCount(board.bitboards[Board::WHITE_BISHOP]);
+	int bb_cnt = BitBoardGen::popCount(board.bitboards[Board::BLACK_BISHOP]);
+
+	//Bishop pair bonus
+	if (wb_cnt > 1){
+		mg+= BISHOP_PAIR_MG;
+		eg+= BISHOP_PAIR_EG;
+	}
+	if (bb_cnt > 1){
+		mg-= BISHOP_PAIR_MG;
+		eg-= BISHOP_PAIR_EG;
+	}
+}
+
 void Evaluation::initEvalInfo(const Board& board, EvalInfo& ei){
     // inits occupancy and attacks BBs
     computeAttacks(board, ei);
@@ -855,6 +876,7 @@ int Evaluation::evaluate(const Board& board) {
     kingShelter(board, mg);
     mobility(board, ei, mg, eg);
     //threats(board, mg, eg, ei);
+    evalBishops(board, mg, eg);
 
     if (phase > TOTAL_PHASE) phase = TOTAL_PHASE;
     int score = ((mg * phase) + (eg * (TOTAL_PHASE - phase))) / TOTAL_PHASE;
