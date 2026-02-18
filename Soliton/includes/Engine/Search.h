@@ -21,6 +21,8 @@ public:
         std::atomic<bool> stopped;
     };
 
+    static void historyStats(Board& board);
+
     // Updated entry point
     static int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose);
     //For eval FEN tool

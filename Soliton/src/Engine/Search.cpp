@@ -41,6 +41,29 @@ void init_mvv() {
     mvv_init = true;
 }
 
+void Search::historyStats(Board& board){
+    int maxHist = 0;
+    long long sumHist = 0;
+    int countHist = 0;
+
+    for (int p = 0; p < 14; ++p) {
+        for (int sq = 0; sq < 64; ++sq) {
+            int h = board.searchHistory[p][sq];
+            if (h != 0) {
+                if (h > maxHist)
+                    maxHist = h;
+                sumHist += h;
+                countHist++;
+            }
+        }
+    }
+
+    double avgHist = (countHist > 0) ? (double)sumHist / countHist : 0.0;
+    std::cout << "History stats: max=" << maxHist
+          << " avg=" << avgHist
+          << " nonzero=" << countHist << std::endl;
+}
+
 int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose) {
     init_mvv();
     params.nodes = 0;
