@@ -408,10 +408,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		/* LMR TODO FIX */
 		if (depth > 3 && legal > 3 && (!atCheck) &&
 			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0  
-			&& (mv_from != Move::from(board.searchKillers[0][board.ply]) || mv_to != Move::to(board.searchKillers[0][board.ply]))
-			&& (mv_from != Move::from(board.searchKillers[1][board.ply]) || mv_to != Move::to(board.searchKillers[1][board.ply]))
-			&& !oppAtCheck){
-				//int reduce = legal > 6 ? int(depth/3) : 2;
+			&& tmp_mv != board.searchKillers[0][board.ply] && tmp_mv != board.searchKillers[1][board.ply]){ //removed && !oppAtCheck
 				int reduce = legal > 6 ? 2 : 1;
 				doReduce = true;
 				score = -alphaBeta(-beta, -alpha, depth - 1 - reduce, true);
