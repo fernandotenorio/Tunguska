@@ -50,6 +50,10 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
     params.timeLimit = moveTime;
     params.depthLimit = maxDepth;
 
+    // Clear heuristics
+    memset(board.searchHistory, 0, sizeof(board.searchHistory));
+    memset(board.searchKillers, 0, sizeof(board.searchKillers));
+
     int alpha = -INFINITE;
     int beta = INFINITE;
 
@@ -215,7 +219,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         // Re-Search Logic:
         // If we reduced the depth, and the move beat alpha (it was better than we thought),
         // we must search it again at full depth to get the accurate score.
-        if (reduction > 0 && score > alpha) {
+        if (reduction > 0 && score > alpha && score < beta) {
             currentDepth = depth - 1 + extension; // Full depth (with extension, no reduction)
             score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
         }
