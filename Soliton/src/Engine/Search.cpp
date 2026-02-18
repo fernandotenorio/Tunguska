@@ -234,7 +234,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         // 1. Depth is substantial (> 2)
         // 2. We have searched the best moves already (legalMovesCount > 3)
         // 3. We are NOT in check (do not reduce evasions)
-        if (depth >= 3 && legalMovesCount > 3 && !inCheck) {
+        if (depth > 3 && legalMovesCount > 3 && !inCheck) {
             
             int captured = Move::captured(move);
             int promoted = Move::promoteTo(move);
@@ -248,7 +248,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
                     
                     reduction = 1;
                     // Reduce more for very late moves at high depth
-                    if (legalMovesCount > 10 && depth > 6) reduction = 2;
+                    if (legalMovesCount > 15 && depth > 6) reduction = 2;
                     
                     // Safety clamp
                     if (reduction >= depth - 1) reduction = depth - 2;
