@@ -77,7 +77,7 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
     int beta = INFINITE;
 
     for (int d = 1; d <= params.depthLimit; d++) {
-        board.ply = 0;
+        board.ply = 0;  // not necessary, defensive. Every iterativeDeepening call starts with a fresh board
         int score = alphaBeta(board, alpha, beta, d, true);
 
         // If search was stopped during this depth, don't use the results
@@ -143,6 +143,7 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
     return finalScore;
 }
 
+static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
     // Check time every 2048 nodes to avoid overhead of system clock calls
     if ((params.nodes & 2047) == 0) checkTime();
@@ -169,6 +170,17 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     int side = board.state.currentPlayer;
     // Determine if we are currently in check (Evasion)
     bool inCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], side ^ 1);
+
+    // Static Eval for Futility Pruning
+    int staticEval = 0;
+    bool futility_prune = false;
+    
+    if (depth < 4 && !inCheck && abs(alpha) < MATE - 100) {
+        staticEval = Evaluation::evaluate(board);
+       
+        if (staticEval + FUTIL_MARGIN[depth] <= alpha)
+			futility_prune = true;
+    }
 
     // Null Move Pruning
     // Condition: !inCheck is crucial here. Never null move while in check.
@@ -200,6 +212,21 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
         legalMovesCount++;
 
+        // Futility prune quiet moves at low depth if static eval + margin is still below alpha
+        if (legalMovesCount > 0 && futility_prune && 
+            move != pvMove &&
+            move != board.searchKillers[0][board.ply] && 
+            move != board.searchKillers[1][board.ply]) {
+            
+            int captured = Move::captured(move);
+            int promoted = Move::promoteTo(move);
+            
+            if (captured == Board::EMPTY && promoted == Board::EMPTY) {
+                board.undoMove(move, undo);
+                continue;
+            }
+        }
+
         // LATE MOVE REDUCTION (LMR)
         int reduction = 0;
         
@@ -224,13 +251,12 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
                     if (legalMovesCount > 10 && depth > 6) reduction = 2;
                     
                     // Safety clamp
-                    if (reduction > depth - 1) reduction = depth - 1;
+                    if (reduction >= depth - 1) reduction = depth - 2;
                 }
             }
         }
 
         // Calculate final depth for this move
-        // Note: 'extension' adds depth (good for check), 'reduction' removes depth (good for bad moves)
         int currentDepth = depth - 1 + extension - reduction;
 
         int score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
@@ -238,7 +264,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         // Re-Search Logic:
         // If we reduced the depth, and the move beat alpha (it was better than we thought),
         // we must search it again at full depth to get the accurate score.
-        if (reduction > 0 && score > alpha && score < beta) {
+        if (reduction > 0 && score > alpha) {
             currentDepth = depth - 1 + extension; // Full depth (with extension, no reduction)
             score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
         }
