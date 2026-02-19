@@ -100,7 +100,6 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
 
 	assert(index >= 0 && index <= board.hashTable->numEntries_1);
-	//assert(depth >=1 && depth <= Board::MAX_DEPTH);
     assert(flags >= HFNONE && flags <= HFEXACT);
     assert(score >= -Search::INFINITE && score <= Search::INFINITE);
     assert(board.ply >=0 && board.ply < Board::MAX_DEPTH);

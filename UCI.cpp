@@ -79,8 +79,8 @@ int UCI::parseField(std::string input, std::string field){
 void UCI::inputGo(std::string input){
 	int depth = -1;
 	int movesToGo = 30;
-	int moveTime = -1;	//fixed time per move
-	int time = -1;
+	int moveTime = 0;
+	int time = 0;
 	int inc = 0;
 
 	info.timeSet = false;
@@ -110,7 +110,7 @@ void UCI::inputGo(std::string input){
 	}
 	
 	//fixed time per move set
-	if(moveTime != -1) {
+	if(moveTime != 0) {
 		time = moveTime;
 		movesToGo = 1;
 	}
@@ -119,10 +119,9 @@ void UCI::inputGo(std::string input){
 	info.depth = depth == -1 ? Board::MAX_DEPTH : depth;
 	info.stopTime = 0;
 
-	if(time != -1){
+	if(time != 0){
 		info.timeSet = true;
 		time/= movesToGo;
-		time-= 5;
 		info.stopTime = (info.startTime + time + inc);
 	}
 	

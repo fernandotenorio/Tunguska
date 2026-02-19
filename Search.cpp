@@ -174,12 +174,10 @@ int Search::search(bool verbose){
 			}
 			printf("\n");
 		}
-		
-		
+
 		// printf("Hits: %d  Overwrite: %d  NewWrite: %d  Cut: %d\nOrdering: %.2f  NullCut:%d\n",
 		// 	board.hashTable->hit, board.hashTable->overWrite, board.hashTable->newWrite, board.hashTable->cut,
 		// 	(info.fhf/info.fh)*100, info.nullCut);
-		
 	}
 
 	if (verbose)
@@ -249,23 +247,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		return Evaluation::evaluate(board, board.state.currentPlayer);
 	}
 
-
-	//Mate Distance Pruning
-    // int mate_val = MATE_SCORE - board.ply;
-    // if(mate_val < beta) {
-    //     beta = mate_val;
-    //     if(alpha >= mate_val) {        	
-    //         return mate_val;
-    //     }
-    // }
-    // mate_val = -MATE_SCORE + board.ply;
-    // if(mate_val > alpha) {
-    //     alpha = mate_val;
-    //     if(beta <= mate_val) {
-    //         return mate_val;
-    //     }
-    // }
-
 	//Check extension
 	int side = board.state.currentPlayer;
 	int opp = side^1;
@@ -276,7 +257,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	if (atCheck)
 		depth++;
 
-	//Quiesce
 	if (depth <= 0){		
 		return Quiescence(alpha, beta);
 	}
@@ -304,8 +284,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 
 	//null move pruning
-	//bool hasBigPiece = (board.bitboards[side | Board:: ROOK] != 0 || board.bitboards[side | Board:: QUEEN] != 0 ||
-	//board.bitboards[side | Board:: KNIGHT] != 0 || board.bitboards[side | Board:: BISHOP] != 0);
 	bool hasBigPiece = board.material[side] > Search::ENDGAME_MAT;
 	int R = 2 + depth/6;
 
@@ -322,7 +300,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		  	return beta;
 		}
 	}
-	//null move pruning
 
 	/*
 	int ReverseFutilityStep = 90;
@@ -366,7 +343,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			f_prune = true;
 	} 
 	
-	//Move list
 	MoveList moves;
 	MoveGen::pseudoLegalMoves(&board, side, moves, atCheck);
 	orderMoves(board, moves, pvMove);
@@ -376,16 +352,8 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	int bestMove = Move::NO_MOVE;
 	score = -INFINITE;
 	int bestScore = -INFINITE;
-
-	//pinned
-	//U64 pinned = MoveGen::pinnedBB(&board, side, kingSQ);
 	
-	//Loop through moves
 	for (int i = 0; i < moves.size(); i++){
-		/*
-		if (!MoveGen::isLegalMove(&board, moves.get(i), side, atCheck, pinned))
-			continue;
-		*/		
 		BoardState undo = board.makeMove(moves.get(i));
 		if (!undo.valid)
 			continue;		
