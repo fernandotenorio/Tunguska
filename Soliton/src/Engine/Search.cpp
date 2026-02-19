@@ -79,7 +79,6 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
 
     for (int d = 1; d <= params.depthLimit; d++) {
         board.ply = 0;  // not necessary, defensive. Every iterativeDeepening call starts with a fresh board
-        //int score = alphaBeta(board, alpha, beta, d, true);
         score = aspirationWindow(board, d, score);
 
         // If search was stopped during this depth, don't use the results
@@ -135,7 +134,7 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
 
     for (int d = 1; d <= params.depthLimit; d++) {
         board.ply = 0;
-        int score = alphaBeta(board, alpha, beta, d, true);
+        int score = aspirationWindow(board, d, score);
 
         if (params.stopped) break;
         finalScore = score;
