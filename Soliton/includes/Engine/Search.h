@@ -6,14 +6,6 @@
 #include <chrono>
 #include <atomic>
 
-//Eval type
-enum {
-    empty = 0,
-    lowerbound = 1,
-    upperbound = 2,
-    exact = 3
-};
-
 class Search {
 public:
     static const int INFINITE = 30000;

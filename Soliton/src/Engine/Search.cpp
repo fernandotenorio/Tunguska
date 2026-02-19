@@ -145,47 +145,38 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
     return finalScore;
 }
 
-int Search::aspirationWindow(Board& board, int depth, int score){
-	int delta = 15;
-    int alpha = std::max(-MATE, score - delta);
-    int beta = std::min(MATE, score + delta);
+int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
-    if(depth <= 5) {
+    if (depth <= 3)
         return alphaBeta(board, -MATE, MATE, depth, true);
-    }
 
-    int f = score;
-    while(abs(f) < MATE - 1) {
-        f = alphaBeta(board, alpha, beta, depth, true);
+    int delta = 15;
+    int alpha = std::max(-MATE, prevScore - delta);
+    int beta  = std::min(MATE, prevScore + delta);
 
-        if (params.stopped){
-			break;
-		}
+    while (true) {
 
-        int evalType = 0;
+        int score = alphaBeta(board, alpha, beta, depth, true);
 
-        if(f > alpha && f < beta) {
-            evalType = exact;
-        }
+        if (params.stopped)
+            return score;
 
-        if(f <= alpha) {
-            beta = (alpha + beta)/2;
+        if (score <= alpha) {
             alpha = std::max(-MATE, alpha - delta);
-            evalType = upperbound;
         }
-
-        if(f >= beta) {
+        else if (score >= beta) {
             beta = std::min(MATE, beta + delta);
-            evalType = lowerbound;
+        }
+        else {
+            return score;
         }
 
-        if(evalType == exact) {
-            break;
-        }
+        delta += delta / 2;
 
-        delta+= delta/2;
+        if (delta > 1000) {
+            return alphaBeta(board, -MATE, MATE, depth, true);
+        }
     }
-    return f;
 }
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
@@ -258,7 +249,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         legalMovesCount++;
 
         // Futility prune quiet moves at low depth if static eval + margin is still below alpha
-        if (legalMovesCount > 0 && futility_prune && 
+        if (legalMovesCount > 1 && futility_prune &&
             move != pvMove &&
             move != board.searchKillers[0][board.ply] && 
             move != board.searchKillers[1][board.ply]) {
