@@ -131,10 +131,11 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
     int alpha = -INFINITE;
     int beta = INFINITE;
     int finalScore = INVALID_SCORE;
+    int score = 0;
 
     for (int d = 1; d <= params.depthLimit; d++) {
         board.ply = 0;
-        int score = aspirationWindow(board, d, score);
+        score = aspirationWindow(board, d, score);
 
         if (params.stopped) break;
         finalScore = score;
