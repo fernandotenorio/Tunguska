@@ -334,7 +334,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 
 	//Razoring pruning
 	/*
-	//if (pvMove == Move::NO_MOVE && depth <= 4 && !atCheck && doNull){
 	if (pvMove == Move::NO_MOVE && depth <= 3 && !atCheck && doNull){
 		static_eval = static_set ? static_eval : Evaluation::evaluate(board, side);
 		static_set = true;
@@ -356,7 +355,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 	//end of Razoring pruning
 	*/
-
+	
 	//Futility pruning
 	bool f_prune = false;
 	if (depth <= 3 && !atCheck && abs(alpha) < 9000){
@@ -398,14 +397,14 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		int mv_to = Move::to(tmp_mv);
 
 		//Futility pruning
-		if (f_prune && legal > 0 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
+		if (f_prune && legal > 1 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
 			board.undoMove(tmp_mv, undo);
 			continue;
 		}
 
 		bool doReduce = false;
 
-		/* LMR TODO FIX */
+		/* LMR */
 		if (depth > 3 && legal > 3 && (!atCheck) &&
 			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0  
 			&& tmp_mv != board.searchKillers[0][board.ply] && tmp_mv != board.searchKillers[1][board.ply]){ //removed && !oppAtCheck
@@ -413,7 +412,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 				doReduce = true;
 				score = -alphaBeta(-beta, -alpha, depth - 1 - reduce, true);
 		}
-		else {//no LMR			
+		else {
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
 
@@ -421,7 +420,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		if (score > alpha && doReduce){
 			score = -alphaBeta(-beta, -alpha, depth - 1, true);
 		}
-		/* LMR TODO FIX */
 
 		board.undoMove(moves.get(i), undo);
 
@@ -471,7 +469,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	}
 	
 	//Mate or Stalemate detection
-	//if (moves.size() == 0){BUG WHEN THERE'S AT LEAST ONE ILLEGAL MOVE ie, 5R2/8/8/3BK2p/7k/6p1/8/8 w - - 2 62
 	if (legal == 0){
 		if (atCheck){
 			return -INFINITE + board.ply;
@@ -486,7 +483,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	} else{		
 		HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
 	}
-
 	return bestScore;
 }
 
@@ -528,7 +524,6 @@ int Search::Quiescence(int alpha, int beta){
 	}
 
 	MoveList moves;
-	
 	
 	if (atCheck){		
 		U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];

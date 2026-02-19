@@ -91,11 +91,11 @@ class Evaluation{
 	static int materialValueSide(const Board& board, int side);
 	static void evalBishops(const Board& board, int& mg, int& eg);
 	static void evalRooks(const Board& board, int& mg, int& eg);
-	static void mobility(const Board& board, int& mg, int& eg, AttackCache *attCache);
 	static void threats(const Board& board, int& mg, int& eg, AttackCache *attCache);
 	static void imbalance(const Board& board, int& mg, int& eg);
 	static void outposts(const Board& board, int&mg, int&eg);
-	
+	static void mobility(const Board& board, int& mg, int& eg);
+
 	static Board mirrorBoard(Board& board);
 	static void testEval(std::string test_file);
 	static int get_phase(const Board& board);

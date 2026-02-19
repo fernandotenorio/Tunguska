@@ -794,6 +794,70 @@ int Evaluation::materialValueSide(const Board& board, int side){
 	return abs(mat) - KING_VAL;
 }
 
+void Evaluation::mobility(const Board& board, int& mg, int& eg) {
+    int s = 1;
+    // Pre-calculated bonuses per piece per number of moves (0-27 for Queen)
+    const int KNIGHT_MOBILITY_MG[9] = {-30, -15, 0, 5, 10, 15, 18, 20, 22};
+    const int BISHOP_MOBILITY_MG[14] = {-20, -10, 0, 3, 6, 9, 12, 14, 16, 18, 20, 21, 22, 23};
+    const int ROOK_MOBILITY_MG[15]   = {-12, -6, 0, 2, 4, 6, 8, 10, 11, 12, 13, 13, 14, 14, 14};
+    const int QUEEN_MOBILITY_MG[28]  = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 18, 18};
+
+    const int KNIGHT_MOBILITY_EG[9] = {-20, -10, 0, 2, 4, 6, 8, 9, 10};
+    const int BISHOP_MOBILITY_EG[14]= {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10};
+    const int ROOK_MOBILITY_EG[15]  = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10};
+    const int QUEEN_MOBILITY_EG[28] = {-10, -5, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 18, 18};
+    int scale = 1;
+    U64 occup = board.bitboards[0] | board.bitboards[1];
+
+    for (int side = 0; side < 2; ++side) {
+        int opp = side^1;
+        U64 ourPieces = board.bitboards[side];
+        //U64 ourPawns = board.bitboards[Board::PAWN | side];
+        //U64 mobArea = ~(ei.attackInfo.pawns[opp] | ourPieces);
+        
+        U64 knights = board.bitboards[Board::KNIGHT | side];
+        while (knights) {
+            int sq = numberOfTrailingZeros(knights);
+            U64 moves = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[sq] & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * KNIGHT_MOBILITY_MG[count]/scale;
+            eg += s * KNIGHT_MOBILITY_EG[count]/scale;
+            knights &= knights - 1;
+        }
+
+        U64 bishops = board.bitboards[Board::BISHOP | side];
+        while (bishops) {
+            int sq = numberOfTrailingZeros(bishops);
+            U64 moves = Magic::bishopAttacksFrom(occup, sq) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * BISHOP_MOBILITY_MG[count]/scale;
+            eg += s * BISHOP_MOBILITY_EG[count]/scale;
+            bishops &= bishops - 1;
+        }
+        
+        U64 rooks = board.bitboards[Board::ROOK | side];
+        while (rooks) {
+            int sq = numberOfTrailingZeros(rooks);
+            U64 moves = Magic::rookAttacksFrom(occup, sq) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * ROOK_MOBILITY_MG[count]/scale;
+            eg += s * ROOK_MOBILITY_EG[count]/scale;
+            rooks &= rooks - 1;
+        }
+        
+        U64 queens = board.bitboards[Board::QUEEN | side];
+        while(queens) {
+            int sq = numberOfTrailingZeros(queens);
+            U64 moves = (Magic::rookAttacksFrom(occup, sq) | Magic::bishopAttacksFrom(occup, sq)) & ~ourPieces;
+            int count = BitBoardGen::popCount(moves);
+            mg += s * QUEEN_MOBILITY_MG[count]/scale;
+            eg += s * QUEEN_MOBILITY_EG[count]/scale;
+            queens &= queens - 1;
+        }
+        s = -1;
+    }
+}
+
 //Phase
 static const int pawn_phase = 0;
 static const int knight_phase = 1;
@@ -900,85 +964,6 @@ void Evaluation::evalRooks(const Board& board, int& mg, int& eg){
 			mg+= board.bitboards[Board::QUEEN | side] ? s * D_ROOK_7_Q : 0;
 			eg+= board.bitboards[Board::QUEEN | side] ? s * D_ROOK_7_Q : 0;
 		}
-		s = -1;
-	}
-}
-
-//Mobility
-static const int MOB_N[2][9] = {{-29, -9, -3, -1, 3, 6, 8, 12, 14}, {-30, -6, -2, 2, 5, 8, 11, 14, 15}};
-static const int MOB_B[2][14] = {{-21, -6, 6, 12, 15, 21, 23, 26, 29, 32, 32, 33, 33, 33}, {-32, -7, 3, 7, 11, 16, 19, 23, 30, 33, 35, 37, 40, 42}};
-static const int MOB_R[2][15] = {{-23, -7, -5, -4, -3, -1, 4, 8, 12, 12, 14, 15, 17, 20, 23}, {-36, -8, 8, 19, 25, 36, 42, 47, 53, 57, 63, 65, 67, 68, 68}};
-static const int MOB_Q[2][28] = {{-25, -8, 0, 1, 5, 8, 12, 15, 16, 19, 21, 24, 25, 27, 27, 28, 29, 30, 32, 34, 35, 39, 40, 40, 41, 43, 44, 45}, {-40, -2, 6, 9, 18, 23, 28, 32, 34, 38, 42, 45, 46, 46, 49, 51, 52, 54, 56, 58, 62, 66, 70, 75, 79, 81, 83, 84}};		
-
-/*
-static const int MOB_N[2][9] = {{-75, -56, -9, -2, 6, 15, 22, 30, 36}, {-76, -54, -26, -10, 5, 11, 26, 28, 29}};
-static const int MOB_B[2][14] = {{-48, -21 ,16, 26, 37, 51, 54, 63, 65, 71, 79, 81, 92, 97}, {-58, -19, -2, 12, 22, 42, 54, 58, 63, 70, 74, 86, 90, 94}};
-static const int MOB_R[2][15] = {{-56, -25, -11, -5, -4, -1, 8, 14, 21, 23, 31, 32, 43, 49, 59}, {-78, -18, 26, 55, 70, 81, 109, 120, 128, 143, 154, 160, 165, 168, 169}};
-static const int MOB_Q[2][28] = {{-40, -25, 2, 4, 14, 24, 25, 40, 43, 47, 54, 56, 60, 70, 72, 73, 75, 
-					77, 85, 94, 99, 108, 112, 113, 118, 119, 123, 128}, 
-					{-35, -12, 7, 19, 37, 55, 62, 76, 79, 87, 94, 102, 111, 116, 118, 122,
-					128, 130, 133, 136, 140, 157, 158, 161, 174, 177, 191, 199}};
-*/
-
-
-static const int dirs[2][2] = {{7, 64 - 9}, {9, 64 - 7}};
-static const int diffs[2][2] = {{7, -9}, {9, -7}};
-static const U64 lowRanks[2] = {BitBoardGen::BITBOARD_RANKS[1] | BitBoardGen::BITBOARD_RANKS[2], BitBoardGen::BITBOARD_RANKS[6] | BitBoardGen::BITBOARD_RANKS[5]};
-
-void Evaluation::mobility(const Board& board, int& mg, int& eg, AttackCache *attCache){
-	
-	U64 occup = board.bitboards[Board::WHITE] | board.bitboards[Board::BLACK];
-	int s = 1;
-	const int scale = 1;
-	const int scale_q = 2;
-	int n = 0;
-
-	for (int side = 0; side < 2; side++){
-		
-		int opp = side^1;
-		U64 oppPawnBB = board.bitboards[Board::PAWN | opp];
-		U64 oppPawnAttacks = 0;
-		U64 blockedLowPawns = 0;
-
-		if (side == Board::WHITE){
-			oppPawnAttacks = ((oppPawnBB >> 9) & ~BitBoardGen::BITBOARD_FILES[7]) | ((oppPawnBB >> 7) & ~BitBoardGen::BITBOARD_FILES[0]);
-			//blockedLowPawns = board.bitboards[Board::WHITE_PAWN] & ((occup >> 8) | lowRanks[side]);			
-		} else{			
-			oppPawnAttacks = ((oppPawnBB << 9) & ~BitBoardGen::BITBOARD_FILES[0]) | ((oppPawnBB << 7) & ~BitBoardGen::BITBOARD_FILES[7]);
-			//blockedLowPawns = board.bitboards[Board::BLACK_PAWN] & ((occup << 8) | lowRanks[side]);								
-		}
-		
-		//U64 mobilityArea = ~(blockedLowPawns | board.bitboards[Board::KING | side] | board.bitboards[Board::QUEEN | side] | oppPawnAttacks); 
-		U64 mobilityArea = ~(board.bitboards[side] | oppPawnAttacks) | board.bitboards[Board::KING | opp];
-
-		//knights
-		if (board.bitboards[Board::KNIGHT | side]){
-			n = BitBoardGen::popCount(attCache->knights[side] & mobilityArea);
-			mg+= s * MOB_N[0][n]/scale;
-			eg+= s * MOB_N[1][n]/scale;
-		}
-		
-		//bishops		
-		if (board.bitboards[Board::BISHOP | side]){
-			n = BitBoardGen::popCount(attCache->bishops[side] & mobilityArea);
-			mg+= s * MOB_B[0][n]/scale;
-			eg+= s * MOB_B[1][n]/scale;
-		}
-		/*
-		//rooks
-		if (board.bitboards[Board::ROOK | side]){
-			n = BitBoardGen::popCount(attCache->rooks[side] & mobilityArea);
-			mg+= s * MOB_R[0][n]/scale;
-			eg+= s * MOB_R[1][n]/scale;
-		}
-		
-		//queen		
-		if (board.bitboards[Board::QUEEN | side]){
-			n = BitBoardGen::popCount(attCache->queens[side] & mobilityArea);
-			mg+= s * MOB_Q[0][n]/scale_q;
-			eg+= s * MOB_Q[1][n]/scale_q;
-		}
-		*/
 		s = -1;
 	}
 }
@@ -1197,7 +1182,7 @@ int Evaluation::evaluate(const Board& board, int side){
 	evalBishops(board, mg, eg);
 	evalRooks(board, mg, eg);
 	outposts(board, mg, eg);
-	//mobility(board, mg, eg, &attCache);
+	mobility(board, mg, eg);
 	threats(board, mg, eg, &attCache);
 	//imbalance(board, mg, eg);
 	

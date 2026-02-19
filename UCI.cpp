@@ -10,8 +10,8 @@
 #include "Magic.h"
 #include "TestSuite.h"
 
-const std::string UCI::ENGINE_NAME = "Tunguska 1.0";
-const std::string UCI::ENGINE_AUTHOR = "Fernando Tenorio";
+const std::string UCI::ENGINE_NAME = "Tunguska 1.1";
+const std::string UCI::ENGINE_AUTHOR = "Fernando Mir";
 
 UCI::UCI(){
 	hashTable = new HashTable();
@@ -23,6 +23,8 @@ UCI::~UCI(){
 
 void UCI::uciLoop(){
 	std::string input;
+	board = Board::fromFEN(Board::START_POS);
+	board.setHashTable(hashTable);
 	
 	while (true){
 		

@@ -38,7 +38,7 @@ const int index64_lead[64] = {
 
 //inline or duplicated symbol error
 inline int numberOfTrailingZeros(U64 bb){
-   assert (bb != 0);
+   //assert (bb != 0);
 #ifdef _MSC_VER
    unsigned long index;
    _BitScanForward64(&index, bb);
@@ -49,7 +49,7 @@ inline int numberOfTrailingZeros(U64 bb){
 }
 
 inline int numberOfLeadingZeros(U64 bb){
-   assert (bb != 0);
+   //assert (bb != 0);
 #ifdef _MSC_VER
    unsigned long index;
    _BitScanReverse64(&index, bb);
