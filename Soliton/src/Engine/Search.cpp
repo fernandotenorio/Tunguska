@@ -75,10 +75,12 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
 
     int alpha = -INFINITE;
     int beta = INFINITE;
+    int score = 0;
 
     for (int d = 1; d <= params.depthLimit; d++) {
         board.ply = 0;  // not necessary, defensive. Every iterativeDeepening call starts with a fresh board
-        int score = alphaBeta(board, alpha, beta, d, true);
+        //int score = alphaBeta(board, alpha, beta, d, true);
+        score = aspirationWindow(board, d, score);
 
         // If search was stopped during this depth, don't use the results
         if (params.stopped) break;
@@ -141,6 +143,49 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
         if (score > MATE || score < -MATE) break;
     }
     return finalScore;
+}
+
+int Search::aspirationWindow(Board& board, int depth, int score){
+	int delta = 15;
+    int alpha = std::max(-MATE, score - delta);
+    int beta = std::min(MATE, score + delta);
+
+    if(depth <= 5) {
+        return alphaBeta(board, -MATE, MATE, depth, true);
+    }
+
+    int f = score;
+    while(abs(f) < MATE - 1) {
+        f = alphaBeta(board, alpha, beta, depth, true);
+
+        if (params.stopped){
+			break;
+		}
+
+        int evalType = 0;
+
+        if(f > alpha && f < beta) {
+            evalType = exact;
+        }
+
+        if(f <= alpha) {
+            beta = (alpha + beta)/2;
+            alpha = std::max(-MATE, alpha - delta);
+            evalType = upperbound;
+        }
+
+        if(f >= beta) {
+            beta = std::min(MATE, beta + delta);
+            evalType = lowerbound;
+        }
+
+        if(evalType == exact) {
+            break;
+        }
+
+        delta+= delta/2;
+    }
+    return f;
 }
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};

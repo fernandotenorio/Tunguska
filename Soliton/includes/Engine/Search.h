@@ -6,6 +6,14 @@
 #include <chrono>
 #include <atomic>
 
+//Eval type
+enum {
+    empty = 0,
+    lowerbound = 1,
+    upperbound = 2,
+    exact = 3
+};
+
 class Search {
 public:
     static const int INFINITE = 30000;
@@ -27,6 +35,7 @@ public:
     static int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose);
     //For eval FEN tool
     static int iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool verbose);
+    static int aspirationWindow(Board& board, int depth, int score);
     static void stop();
 
 private:
