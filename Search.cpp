@@ -185,50 +185,38 @@ int Search::search(bool verbose){
 	return bestMove;
 }
 
+int Search::aspirationWindow(Board* board, int depth, int prevScore) {
 
-int Search::aspirationWindow(Board* board, int depth, int score){
-	int delta = 15;
-    int alpha = std::max(-MATE_SCORE, score - delta);
-    int beta = std::min(MATE_SCORE, score + delta);
-
-    if(depth <= 5) {
+    if (depth <= 3)
         return alphaBeta(-MATE_SCORE, MATE_SCORE, depth, true);
-    }
 
-    int f = score;
-    while(abs(f) < MATE_SCORE - 1) {
-        f = alphaBeta(alpha, beta, depth, true);
+    int delta = 15;
+    int alpha = std::max(-MATE_SCORE, prevScore - delta);
+    int beta  = std::min(MATE_SCORE, prevScore + delta);
 
-        if (info.stopped){
-			break;
-		}
+    while (true) {
 
-        int evalType = 0;
+        int score = alphaBeta(alpha, beta, depth, true);
 
-        if(f > alpha && f < beta) {
-            evalType = exact;
-        }
+        if (params.stopped)
+            return score;
 
-        if(f <= alpha) {
-            beta = (alpha + beta)/2;
+        if (score <= alpha) {
             alpha = std::max(-MATE_SCORE, alpha - delta);
-            evalType = upperbound;
         }
-
-        if(f >= beta) {
+        else if (score >= beta) {
             beta = std::min(MATE_SCORE, beta + delta);
-            evalType = lowerbound;
+        }
+        else {
+            return score;
         }
 
-        //printSearchInfo(searchInfo, board, depth, f, evalType);
+        delta += delta / 2;
 
-        if(evalType == exact) {
-            break;
+        if (delta > 1000) {
+            return alphaBeta(-MATE_SCORE, MATE_SCORE, depth, true);
         }
-
-        delta+= delta/2;
     }
-    return f;
 }
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 500};
