@@ -70,10 +70,6 @@ bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pi
 	assert(board->bitboards[theKing] != 0);	
 	int kingSQ = (movingPiece == theKing) ? to : startKingSQ;
 	bool tmpCheck =	isSquareAttacked(board, kingSQ, opp);
-	
-	//Undo bitboards
-	//for (int j = 0; j < 14; j++)
-	//	board->bitboards[j] = bb_bk[j];
 
 	board->bitboards[side] = bb_bk[side];
 	board->bitboards[movingPiece] = bb_bk[movingPiece];
@@ -252,7 +248,6 @@ void MoveGen::pawnMoves(const Board* board, int side, MoveList& moves, U64 occup
 	int opp = side^1;
 	
 	//pushes
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 	U64 pushes = BitBoardGen::circular_lsh(pawnBB, push_dir[side]) & ~occup;	
 	
 	U64 dpushes = BitBoardGen::circular_lsh((pushes & BitBoardGen::BITBOARD_RANKS[push_ranks[side]]), push_dir[side]);
@@ -355,7 +350,6 @@ void MoveGen::rookCaptures(const Board* board, int side, MoveList& moves, U64 oc
 	int opp = side ^ 1;
 	U64 enemy = board->bitboards[opp] & ~board->bitboards[Board::KING | opp];
 	U64 rooks = board->bitboards[Board::ROOK | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 
 	while (rooks){	
 		int from = numberOfTrailingZeros(rooks);
@@ -368,7 +362,6 @@ void MoveGen::rookCaptures(const Board* board, int side, MoveList& moves, U64 oc
 void MoveGen::rookMoves(const Board* board, int side, MoveList& moves, U64 occup){
 	int opp = side^1;
 	U64 rooks = board->bitboards[Board::ROOK | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 	U64 enemyOrEmpty = ~board->bitboards[side] & ~board->bitboards[Board::KING | opp];
 
 	while(rooks){
@@ -383,7 +376,6 @@ void MoveGen::bishopCaptures(const Board* board, int side, MoveList& moves, U64 
 	int opp = side^1;
 	U64 enemy = board->bitboards[opp] & ~board->bitboards[Board::KING | opp];
 	U64 bishops = board->bitboards[Board::BISHOP | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 
 	while (bishops){
 		int from = numberOfTrailingZeros(bishops);
@@ -398,7 +390,6 @@ void MoveGen::bishopMoves(const Board* board, int side, MoveList& moves, U64 occ
 	
 	int opp = side ^ 1;
 	U64 bishops = board->bitboards[Board::BISHOP | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 	U64 enemyOrEmpty = ~board->bitboards[side] & ~board->bitboards[Board::KING | opp];
 
 	while (bishops){
@@ -413,7 +404,6 @@ void MoveGen::queenCaptures(const Board* board, int side, MoveList& moves, U64 o
 	int opp = side^1;
 	U64 enemy = board->bitboards[opp] & ~board->bitboards[Board::KING | opp];
 	U64 queens = board->bitboards[Board::QUEEN | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 
 	while (queens){	
 		int from = numberOfTrailingZeros(queens);
@@ -426,7 +416,6 @@ void MoveGen::queenCaptures(const Board* board, int side, MoveList& moves, U64 o
 void MoveGen::queenMoves(const Board* board, int side, MoveList& moves, U64 occup){
 	int opp = side ^ 1;
 	U64 queens = board->bitboards[Board::QUEEN | side];
-	//U64 occup = board->bitboards[side] | board->bitboards[opp];
 	U64 enemyOrEmpty = ~board->bitboards[side] & ~board->bitboards[Board::KING | opp];
 
 	while(queens){
@@ -470,14 +459,12 @@ bool MoveGen::isSquareAttacked(const Board* board, int sq, int bySide){
 }
 
 U64 MoveGen::xrayRook(const Board* board, U64 blockers, int from, int side, U64 occup){
-	//U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
 	U64 attacks = Magic::rookAttacksFrom(occup, from);
 	blockers&= attacks;
 	return attacks ^ Magic::rookAttacksFrom(occup^blockers, from);
 }
 
 U64 MoveGen::xrayBishop(const Board* board, U64 blockers, int from, int side, U64 occup){
-	//U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
 	U64 attacks = Magic::bishopAttacksFrom(occup, from);
 	blockers&= attacks;
 	return attacks ^ Magic::bishopAttacksFrom(occup^blockers, from);
@@ -581,8 +568,6 @@ void MoveGen::solve_check_moves(const Board* board, U64 targets, int checker_sq,
 	//normal capture
 	U64 pawns = board->bitboards[Board::PAWN | side] & BitBoardGen::BITBOARD_PAWN_ATTACKS[opp][checker_sq];
 
-	//if (pawns && (checker_sq != promo_ranks[side])){ DEAD BUG WAS HERE!
-	//if (pawns && (checker_sq >> 3) != promo_ranks[side]){ //OK
 	if (pawns && !(BitBoardGen::SQUARES[checker_sq] & BitBoardGen::BITBOARD_RANKS[promo_ranks[side]])){
 		while(pawns){
 			int from = numberOfTrailingZeros(pawns);
@@ -624,7 +609,6 @@ void MoveGen::solve_check_moves(const Board* board, U64 targets, int checker_sq,
 	addMovesForDir(board, side, pushesSolve, diff_push, Move::NO_FLAGS, moves);
 	addMovesForDir(board, side, dpushes, diff_jump, Move::PAWN_JUMP_FLAG, moves);
 	addPromotionsForDir(board, side, promotions_quiet, diff_push, Move::NO_FLAGS, moves);
-	
 }
 
 void MoveGen::getEvasions(const Board* board, int side, MoveList& moves, U64 occup){
@@ -655,10 +639,5 @@ void MoveGen::getEvasions(const Board* board, int side, MoveList& moves, U64 occ
 	
 	//get moves from other pieces blocking or capturing the checker
 	solve_check_moves(board, targets, checker_sq, side, moves, occup);
-	//pawnMoves(board, side, moves);
-	//rookMoves(board, side, moves);
-	//knightMoves(board, side, moves);
-	//bishopMoves(board, side, moves);
-	//queenMoves(board, side, moves);
 }
 
