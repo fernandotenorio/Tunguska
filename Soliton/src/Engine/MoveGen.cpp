@@ -97,6 +97,19 @@ void MoveGen::pseudoLegalCaptureMoves(Board* board, int side, MoveList& capts){
 	kingCaptures(board, side, capts);
 }
 
+// Quiet moves 
+void MoveGen::pseudoLegalQuietMoves(Board* board, int side, MoveList& moves, bool atCheck){
+	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
+
+	pawnQuiet(board, side, moves);
+	knightQuiet(board, side, moves, occup);
+	bishopQuiet(board, side, moves, occup);
+	rookQuiet(board, side, moves, occup);
+	queenQuiet(board, side, moves, occup);
+	kingQuiet(board, side, moves, occup);
+}
+
+/*
 void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atCheck){
 
 	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
@@ -111,6 +124,39 @@ void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atC
 		bishopMoves(board, side, moves, occup);
 		queenMoves(board, side, moves, occup);
 		kingMoves(board, side, moves);
+	}
+
+	if(!atCheck && can_castle_ks(board, side, occup)){
+		int mv = Move::get_move(0, side, 0, 0, 0, 0, Move::CASTLE_FLAG);
+		moves.add(mv);
+	}
+	if (!atCheck && can_castle_qs(board, side, occup)){		
+		int mv = Move::get_move(1, side, 0, 0, 0, 0, Move::CASTLE_FLAG);
+		moves.add(mv);
+	}
+}
+*/
+
+void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atCheck){
+
+	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
+
+	if (atCheck){
+		getEvasions(board, side, moves, occup);
+	}
+    else{
+		pawnCaptures(board, side, moves);
+		pawnQuiet(board, side, moves);
+		knightCaptures(board, side, moves);
+		knightQuiet(board, side, moves, occup);
+		bishopCaptures(board, side, moves, occup);
+		bishopQuiet(board, side, moves, occup);
+		rookCaptures(board, side, moves, occup);
+		rookQuiet(board, side, moves, occup);
+		queenCaptures(board, side, moves, occup);
+		queenQuiet(board, side, moves, occup);
+		kingCaptures(board, side, moves);
+		kingQuiet(board, side, moves, occup);
 	}
 
 	if(!atCheck && can_castle_ks(board, side, occup)){
@@ -208,6 +254,28 @@ void MoveGen::pawnCaptures(const Board* board, int side, MoveList& moves){
 	}
 }
 
+void MoveGen::pawnQuiet(const Board* board, int side, MoveList& moves){
+	U64 pawnBB = board->bitboards[Board::PAWN | side];
+	int opp = side^1;
+	U64 occup = board->bitboards[side] | board->bitboards[opp];
+	
+	//pushes
+	U64 pushes = BitBoardGen::circular_lsh(pawnBB, push_dir[side]) & ~occup;	
+	U64 dpushes = BitBoardGen::circular_lsh((pushes & BitBoardGen::BITBOARD_RANKS[push_ranks[side]]), push_dir[side]);
+	dpushes &= ~occup;
+	
+	U64 promotions_quiet = pushes & BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
+	//remove promotion from pushes
+	pushes &= ~BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
+	
+	if (pushes)
+		addMovesForDir(board, side, pushes, diff_push, Move::NO_FLAGS, moves);
+	if (dpushes)
+		addMovesForDir(board, side, dpushes, diff_jump, Move::PAWN_JUMP_FLAG, moves);
+	if (promotions_quiet)
+		addPromotionsForDir(board, side, promotions_quiet, diff_push, Move::NO_FLAGS, moves);
+}
+
 //Used in qsearch
 void MoveGen::pawnPromotions(const Board* board, int side, MoveList& moves, bool only_quiet){
 
@@ -241,28 +309,8 @@ void MoveGen::pawnPromotions(const Board* board, int side, MoveList& moves, bool
 }
 
 void MoveGen::pawnMoves(const Board* board, int side, MoveList& moves, U64 occup){
-
 	pawnCaptures(board, side, moves);
-
-	U64 pawnBB = board->bitboards[Board::PAWN | side];
-	int opp = side^1;
-	
-	//pushes
-	U64 pushes = BitBoardGen::circular_lsh(pawnBB, push_dir[side]) & ~occup;	
-	
-	U64 dpushes = BitBoardGen::circular_lsh((pushes & BitBoardGen::BITBOARD_RANKS[push_ranks[side]]), push_dir[side]);
-	dpushes &= ~occup;
-	
-	U64 promotions_quiet = pushes & BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
-	//remove promotion from pushes
-	pushes &= ~BitBoardGen::BITBOARD_RANKS[promo_ranks[side]];
-	
-	if (pushes)
-		addMovesForDir(board, side, pushes, diff_push, Move::NO_FLAGS, moves);
-	if (dpushes)
-		addMovesForDir(board, side, dpushes, diff_jump, Move::PAWN_JUMP_FLAG, moves);
-	if (promotions_quiet)
-		addPromotionsForDir(board, side, promotions_quiet, diff_push, Move::NO_FLAGS, moves);
+	pawnQuiet(board, side, moves);
 }
 
 void MoveGen::addPromotionsForDir(const Board* board, int side, U64 pushes, int diff[], int flags, MoveList& moves){
@@ -310,6 +358,19 @@ void MoveGen::knightCaptures(const Board* board, int side, MoveList& moves){
 	}
 }
 
+void MoveGen::knightQuiet(const Board* board, int side, MoveList& moves, U64 occup){
+	int opp = side^1;
+	U64 kn = board->bitboards[Board::KNIGHT | side];
+	U64 empty = ~occup;
+
+	while (kn){
+		int from = numberOfTrailingZeros(kn);
+		U64 targets = BitBoardGen::BITBOARD_KNIGHT_ATTACKS[from] & empty;
+		add_moves(board, from, targets, Move::NO_FLAGS, moves);
+		kn&= kn - 1;
+	}
+}
+
 void MoveGen::knightMoves(const Board* board, int side, MoveList& moves){
 	int opp = side^1;
 	U64 kn = board->bitboards[Board::KNIGHT | side];
@@ -336,6 +397,19 @@ void MoveGen::kingCaptures(const Board* board, int side, MoveList& moves){
 	}
 }
 
+void MoveGen::kingQuiet(const Board* board, int side, MoveList& moves, U64 occup){
+	int opp = side^1;
+	U64 king = board->bitboards[Board::KING | side];
+	U64 empty = ~occup;
+
+	while (king){
+		int from = numberOfTrailingZeros(king);
+		U64 targets = BitBoardGen::BITBOARD_KING_ATTACKS[from] & empty;
+		add_moves(board, from, targets, Move::NO_FLAGS, moves);
+		king&= king - 1;
+	}
+}
+
 void MoveGen::kingMoves(const Board* board, int side, MoveList& moves){
 	int opp = side^1;
 	U64 king = board->bitboards[Board::KING | side];
@@ -355,6 +429,19 @@ void MoveGen::rookCaptures(const Board* board, int side, MoveList& moves, U64 oc
 		int from = numberOfTrailingZeros(rooks);
 		U64 rookAtt = Magic::rookAttacksFrom(occup, from);
 		add_moves(board, from, rookAtt & enemy, Move::NO_FLAGS, moves);
+		rooks&= rooks - 1;
+	}
+}
+
+void MoveGen::rookQuiet(const Board* board, int side, MoveList& moves, U64 occup){
+	int opp = side ^ 1;
+	U64 empty = ~occup;
+	U64 rooks = board->bitboards[Board::ROOK | side];
+
+	while (rooks){	
+		int from = numberOfTrailingZeros(rooks);
+		U64 rookAtt = Magic::rookAttacksFrom(occup, from);
+		add_moves(board, from, rookAtt & empty, Move::NO_FLAGS, moves);
 		rooks&= rooks - 1;
 	}
 }
@@ -385,6 +472,18 @@ void MoveGen::bishopCaptures(const Board* board, int side, MoveList& moves, U64 
 	}
 }
 
+void MoveGen::bishopQuiet(const Board* board, int side, MoveList& moves, U64 occup){
+	int opp = side^1;
+	U64 empty = ~occup;
+	U64 bishops = board->bitboards[Board::BISHOP | side];
+
+	while (bishops){
+		int from = numberOfTrailingZeros(bishops);
+		U64 bishopAtt = Magic::bishopAttacksFrom(occup, from);
+		add_moves(board, from, bishopAtt & empty, Move::NO_FLAGS, moves);
+		bishops&= bishops - 1;
+	}
+}
 
 void MoveGen::bishopMoves(const Board* board, int side, MoveList& moves, U64 occup){
 	
@@ -409,6 +508,19 @@ void MoveGen::queenCaptures(const Board* board, int side, MoveList& moves, U64 o
 		int from = numberOfTrailingZeros(queens);
 		U64 attacks = Magic::queenAttacksFrom(occup, from);		
 		add_moves(board, from, attacks & enemy, Move::NO_FLAGS, moves);
+		queens&= queens - 1;
+	}
+}
+
+void MoveGen::queenQuiet(const Board* board, int side, MoveList& moves, U64 occup){
+	int opp = side^1;
+	U64 empty = ~occup;
+	U64 queens = board->bitboards[Board::QUEEN | side];
+
+	while (queens){	
+		int from = numberOfTrailingZeros(queens);
+		U64 attacks = Magic::queenAttacksFrom(occup, from);		
+		add_moves(board, from, attacks & empty, Move::NO_FLAGS, moves);
 		queens&= queens - 1;
 	}
 }
