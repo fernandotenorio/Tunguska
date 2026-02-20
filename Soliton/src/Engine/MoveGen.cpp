@@ -107,25 +107,8 @@ void MoveGen::pseudoLegalQuietMoves(Board* board, int side, MoveList& moves, boo
 	rookQuiet(board, side, moves, occup);
 	queenQuiet(board, side, moves, occup);
 	kingQuiet(board, side, moves, occup);
-}
 
-/*
-void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atCheck){
-
-	U64 occup = board->bitboards[Board::WHITE] | board->bitboards[Board::BLACK];
-
-	if (atCheck){
-		getEvasions(board, side, moves, occup);
-	}
-    else{
-		pawnMoves(board, side, moves, occup);
-		rookMoves(board, side, moves, occup);
-		knightMoves(board, side, moves);
-		bishopMoves(board, side, moves, occup);
-		queenMoves(board, side, moves, occup);
-		kingMoves(board, side, moves);
-	}
-
+	// Castle
 	if(!atCheck && can_castle_ks(board, side, occup)){
 		int mv = Move::get_move(0, side, 0, 0, 0, 0, Move::CASTLE_FLAG);
 		moves.add(mv);
@@ -135,7 +118,6 @@ void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atC
 		moves.add(mv);
 	}
 }
-*/
 
 void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atCheck){
 
@@ -145,27 +127,8 @@ void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atC
 		getEvasions(board, side, moves, occup);
 	}
     else{
-		pawnCaptures(board, side, moves);
-		pawnQuiet(board, side, moves);
-		knightCaptures(board, side, moves);
-		knightQuiet(board, side, moves, occup);
-		bishopCaptures(board, side, moves, occup);
-		bishopQuiet(board, side, moves, occup);
-		rookCaptures(board, side, moves, occup);
-		rookQuiet(board, side, moves, occup);
-		queenCaptures(board, side, moves, occup);
-		queenQuiet(board, side, moves, occup);
-		kingCaptures(board, side, moves);
-		kingQuiet(board, side, moves, occup);
-	}
-
-	if(!atCheck && can_castle_ks(board, side, occup)){
-		int mv = Move::get_move(0, side, 0, 0, 0, 0, Move::CASTLE_FLAG);
-		moves.add(mv);
-	}
-	if (!atCheck && can_castle_qs(board, side, occup)){		
-		int mv = Move::get_move(1, side, 0, 0, 0, 0, Move::CASTLE_FLAG);
-		moves.add(mv);
+		pseudoLegalCaptureMoves(board, side, moves);
+		pseudoLegalQuietMoves(board, side, moves, atCheck);
 	}
 }
 
