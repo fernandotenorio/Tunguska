@@ -284,7 +284,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
                     
                     reduction = 1;
                     // Reduce more for very late moves at high depth
-                    if (legalMovesCount > 15 && depth > 6) reduction = 2;
+                    if (legalMovesCount > 6) reduction = 2;
                     
                     // Safety clamp
                     if (reduction >= depth - 1) reduction = depth - 2;
