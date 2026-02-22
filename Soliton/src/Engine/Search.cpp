@@ -211,11 +211,28 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     int staticEval = 0;
     bool futility_prune = false;
     
-    if (depth < 4 && !inCheck && abs(alpha) < MATE - 100) {
-        staticEval = Evaluation::evaluate(board);
-       
-        if (staticEval + FUTIL_MARGIN[depth] <= alpha)
-			futility_prune = true;
+    if (!inCheck) {
+        // We calculate staticEval once if we are at low depths (RFP goes up to depth 5)
+        if (depth <= 5) {
+            staticEval = Evaluation::evaluate(board);
+            
+            // 1. Reverse Futility Pruning (Static Null Move Pruning)
+            // If we are not in a mate sequence, and the position is so good that 
+            // even after subtracting a safety margin we still beat beta, we prune!
+            if (abs(beta) < MATE - 100) {
+                int rfp_margin = 120 * depth; 
+                if (staticEval - rfp_margin >= beta) {
+                    return staticEval - rfp_margin; // Cause a Beta cutoff immediately
+                }
+            }
+            
+            // 2. Standard Futility Pruning setup
+            if (depth < 4 && abs(alpha) < MATE - 100) {
+                if (staticEval + FUTIL_MARGIN[depth] <= alpha) {
+                    futility_prune = true;
+                }
+            }
+        }
     }
 
     // Null Move Pruning
