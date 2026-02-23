@@ -198,7 +198,7 @@ int Search::aspirationWindow(Board* board, int depth, int prevScore) {
 
         int score = alphaBeta(alpha, beta, depth, true);
 
-        if (params.stopped)
+        if (info.stopped)
             return score;
 
         if (score <= alpha) {
@@ -384,7 +384,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			return 0;
 		}
 		
-		//if (score > alpha){
 		if (score > bestScore){
 
 			bestScore = score;
@@ -405,21 +404,19 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 					if (capt == 0 && !ep){
 						board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
 						board.searchKillers[0][board.ply] = moves.get(i);
+						
+						bool isCastle = Move::isCastle(bestMove);
+						// History
+						if (!isCastle) {
+							int piece = board.board[Move::from(bestMove)];
+							int to = Move::to(bestMove);
+							board.searchHistory[piece][to] += depth * depth;
+						}
 					}					
 					HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);					
 					return beta;
 				}
 				alpha = score;
-
-				//History
-				int capt = Move::captured(bestMove);
-				bool ep = Move::isEP(bestMove);
-				bool isCastle = Move::isCastle(bestMove);
-
-				if (capt == 0 && !(ep || isCastle)){
-					int piece = board.board[Move::from(bestMove)];
-					board.searchHistory[piece][Move::to(bestMove)] += depth * depth;
-				}
 			}
 		}
 	}
