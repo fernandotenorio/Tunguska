@@ -239,7 +239,6 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 	int side = board.state.currentPlayer;
 	int opp = side^1;
 	int kingSQ = board.kingSQ[side];
-	int oppKingSQ = board.kingSQ[opp];
 	bool atCheck = MoveGen::isSquareAttacked(&board, kingSQ, opp);
 
 	if (atCheck)
@@ -347,13 +346,14 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 			continue;		
 
 		legal++;
-		bool oppAtCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, side);
+		//int oppKingSQ = board.kingSQ[board.state.currentPlayer];
+		//bool oppAtCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, board.state.currentPlayer^1);
 		int tmp_mv = moves.get(i);
 		int mv_from = Move::from(tmp_mv);
 		int mv_to = Move::to(tmp_mv);
 
 		//Futility pruning
-		if (f_prune && legal > 1 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv) && !oppAtCheck){
+		if (f_prune && legal > 1 && !Move::captured(tmp_mv) && !Move::promoteTo(tmp_mv)){
 			board.undoMove(tmp_mv, undo);
 			continue;
 		}
@@ -363,7 +363,7 @@ int Search::alphaBeta(int alpha, int beta, int depth, bool doNull){
 		/* LMR */
 		if (depth > 3 && legal > 3 && (!atCheck) &&
 			Move::captured(tmp_mv) == 0 && Move::promoteTo(tmp_mv) == 0  
-			&& tmp_mv != board.searchKillers[0][board.ply] && tmp_mv != board.searchKillers[1][board.ply]){ //removed && !oppAtCheck
+			&& tmp_mv != board.searchKillers[0][board.ply] && tmp_mv != board.searchKillers[1][board.ply]){
 				int reduce = legal > 6 ? 2 : 1;
 				doReduce = true;
 				score = -alphaBeta(-beta, -alpha, depth - 1 - reduce, true);
