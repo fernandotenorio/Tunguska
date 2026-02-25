@@ -32,7 +32,11 @@ static bool mvv_init = false;
 
 void init_mvv() {
     if (mvv_init) return;
-    int values[] = { 0, 0, 100, 100, 200, 200, 300, 300, 400, 400, 500, 500, 600, 600 };
+    int values[] = { 0, 0, 
+        Evaluation::PAWN_VAL, Evaluation::PAWN_VAL, Evaluation::KNIGHT_VAL, Evaluation::KNIGHT_VAL,
+		Evaluation::BISHOP_VAL, Evaluation::BISHOP_VAL, Evaluation::ROOK_VAL, Evaluation::ROOK_VAL,
+		Evaluation::QUEEN_VAL, Evaluation::QUEEN_VAL, Evaluation::KING_VAL, Evaluation::KING_VAL
+    };
     for (int v = 2; v < 14; v++) {
         for (int a = 2; a < 14; a++) {
             MVV_LVA[v][a] = values[v] + 10 - (values[a] / 100);
@@ -227,7 +231,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
             }
             
             // 2. Standard Futility Pruning setup
-            if (depth < 4 && abs(alpha) < MATE - 100) {
+            if (depth <= 3 && abs(alpha) < MATE - 100) {
                 if (staticEval + FUTIL_MARGIN[depth] <= alpha) {
                     futility_prune = true;
                 }
@@ -236,11 +240,15 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     }
 
     // Null Move Pruning
-    // Condition: !inCheck is crucial here. Never null move while in check.
-    if (doNull && !inCheck && depth >= 3 && board.material[side] > 500) {
+    bool hasBigPiece = (board.bitboards[Board::KNIGHT | side] |
+                        board.bitboards[Board::BISHOP | side] |
+                        board.bitboards[Board::ROOK   | side] |
+                        board.bitboards[Board::QUEEN  | side]) != 0ULL;
+    int R = 2 + depth/4;
+   
+    if (doNull && !inCheck && hasBigPiece && depth > R) {
         BoardState undo = board.makeNullMove();
-        // Standard reduction R=3
-        int score = -alphaBeta(board, -beta, -beta + 1, depth - 3, false);
+        int score = -alphaBeta(board, -beta, -beta + 1, depth - R - 1, false);
         board.undoNullMove(undo);
         if (params.stopped) return 0;
         if (score >= beta) return beta;
@@ -264,6 +272,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         if (!undo.valid) continue;
 
         legalMovesCount++;
+        //int oppKingSQ = board.kingSQ[board.state.currentPlayer];
+        //bool giveCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, board.state.currentPlayer^1);
 
         // Futility prune quiet moves at low depth if static eval + margin is still below alpha
         if (legalMovesCount > 1 && futility_prune &&
@@ -356,6 +366,15 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
 int Search::scoreMove(const Board& board, int move, int pvMove) {
     if (move == pvMove) return 2000000;
+
+    int promo = Move::promoteTo(move);
+    if (promo){
+        return 1500000 + abs(Evaluation::PIECE_VALUES[promo]);
+    }
+
+    if (Move::isEP(move)){
+		return MVV_LVA[Board::WHITE_PAWN][Board::BLACK_PAWN] + 1000000;
+    }
 
     int captured = Move::captured(move);
     if (captured != Board::EMPTY) {
