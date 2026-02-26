@@ -260,6 +260,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
     int legalMovesCount = 0;
     int oldAlpha = alpha;
+    int score = -INFINITE;
+    int bestScore = -INFINITE;
     int bestMove = Move::NO_MOVE;
 
     // If we are in check, we extend the search by 1 ply to resolve the threat.
@@ -322,7 +324,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         // Calculate final depth for this move
         int currentDepth = depth - 1 + extension - reduction;
 
-        int score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+        score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
 
         // Re-Search Logic:
         // If we reduced the depth, and the move beat alpha (it was better than we thought),
@@ -336,32 +338,38 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
         if (params.stopped) return 0;
 
-        if (score >= beta) {
-            if (Move::captured(move) == Board::EMPTY) {
-                board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
-                board.searchKillers[0][board.ply] = move;
-
-                 // History heuristic
-                int piece = board.board[Move::from(move)];
-                board.searchHistory[piece][Move::to(move)] += depth * depth;
-            }
-            HashTable::storeHashEntry(board, move, beta, HFBETA, depth);
-            return beta;
-        }
-        if (score > alpha) {
-            alpha = score;
+        if (score > bestScore){
+            bestScore = score;
             bestMove = move;
+
+            if (score > alpha) {
+                if (score >= beta) {
+                    if (Move::captured(move) == Board::EMPTY) {
+                        board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
+                        board.searchKillers[0][board.ply] = move;
+
+                        // History heuristic
+                        int piece = board.board[Move::from(move)];
+                        board.searchHistory[piece][Move::to(move)] += depth * depth;
+                    }
+                    HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
+                    return beta;
+                }
+                alpha = score;
+            }
         }
-    }
+    } // moves loop
 
     if (legalMovesCount == 0) {
-        // If inCheck, it's Checkmate. Score relies on Ply to prefer faster mates.
         return inCheck ? (-MATE + board.ply) : 0;
     }
 
-    int flag = (alpha > oldAlpha) ? HFEXACT : HFALPHA;
-    HashTable::storeHashEntry(board, bestMove, alpha, flag, depth);
-    return alpha;
+    if (alpha > oldAlpha){
+		HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
+	} else{		
+		HashTable::storeHashEntry(board, bestMove, bestScore, HFALPHA, depth);
+	}
+    return bestScore;
 }
 
 int Search::scoreMove(const Board& board, int move, int pvMove) {
@@ -555,7 +563,7 @@ U64 getLeastValuablePiece(const Board* board, U64 attadef, int side, int& piece)
 }
 
 #include "Engine/Magic.h"
-U64 considerXrays(const Board* board, U64 occu, U64 attackdef, int sq) {
+U64 considerXrays(const Board* board, U64 occu, int sq) {
     int color = board->state.currentPlayer;
     U64 rookQueens = board->bitboards[Board::WHITE_ROOK] | board->bitboards[Board::WHITE_QUEEN] |
         board->bitboards[Board::BLACK_ROOK] | board->bitboards[Board::BLACK_QUEEN];
@@ -610,7 +618,7 @@ int Search::see(const Board* board, int toSq, int target, int fromSq, int aPiece
         // Optimization: Only check if the piece that moved is aligned with the target.
         // If you have LINES_BB initialized:
          if (BitBoardGen::LINES_BB[fromSq][toSq]) {
-            attadef |= considerXrays(board, occup, attadef, toSq);
+            attadef |= considerXrays(board, occup, toSq);
          }
         // If not, just call considerXrays unconditionally. It is safer.
 
