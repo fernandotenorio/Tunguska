@@ -1,0 +1,3 @@
+each line is of the form <FEN> | <score> | <result>
+score is white relative and in centipawns
+result is white relative and of the form 1.0 for win, 0.5 for draw, 0.0 for loss
