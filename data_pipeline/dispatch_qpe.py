@@ -40,7 +40,7 @@ def run_file(fen_file: Path):
 if __name__ == "__main__":
     QUIET_DIR.mkdir(parents=True, exist_ok=True)
 
-    fen_files = list(RAW_DIR.glob("*.fen"))
+    fen_files = list(RAW_DIR.glob("*.epd"))
 
     with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for finished in executor.map(run_file, fen_files):

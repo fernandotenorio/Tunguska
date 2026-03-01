@@ -34,9 +34,33 @@ def get_time_h_mm_ss_ms(time_delta_ns):
     return '{:01d}h:{:02d}m:{:02d}s:{:03d}ms'.format(h, m, s, ms)
 
 
+def parse_epd_line(epd_line):
+    # 1. Extract the FEN part (The first 4 elements separated by spaces)
+    parts = epd_line.split()
+    fen_part = " ".join(parts[:4])
+    
+    # 2. Reconstruct a valid FEN by adding dummy halfmove and fullmove clocks
+    dummy_fen = f"{fen_part} 0 1"
+    
+    # 3. Create the python-chess board
+    board = chess.Board(dummy_fen)
+    
+    # 4. Extract the Game Result (z) from the c1 tag
+    if "c1 1-0" in epd_line:
+        result = 1.0  # White wins
+    elif "c1 0-1" in epd_line:
+        result = 0.0  # Black wins
+    elif "c1 1/2-1/2" in epd_line:
+        result = 0.5  # Draw
+    else:
+        result = None # Fallback if something went wrong
+    return board, {}, result
+
+
 def save_evaluated_epd(epd, filename):
     with open(filename, 'a') as e:
         e.write(f'{epd}\n')
+
 
 def get_epd(infn):
     epds = []
@@ -150,20 +174,18 @@ def runengine(engine_file, engineoption, epdfile, movetimems,
     with open(epdfile) as f:
         for line in f:
 
-            epdline = line.strip()
-            if not epdline:
+            line = line.strip()
+            if not line:
                 continue
 
-            try:
-                board, epdinfo = chess.Board().from_epd(epdline)
-            except ValueError:
-                board = chess.Board(epdline)
-                epdinfo = {}
+            board, epdinfo, result = parse_epd_line(line)
 
             epd = board.epd()
+            epdline = board.epd()
+            fen = board.fen()
             pos_num += 1
 
-            if pos_num % 500 == 0:
+            if pos_num % 5000 == 0:
                 print(f'pos: {pos_num}')
 
             if epd in evaluated_epds:
@@ -197,6 +219,7 @@ def runengine(engine_file, engineoption, epdfile, movetimems,
                             score = info['score'].relative.score(
                                 mate_score=32000
                             )
+                            score_w = info['score'].white().score()
 
                 if ismate:
                     accept = False
@@ -249,8 +272,8 @@ def runengine(engine_file, engineoption, epdfile, movetimems,
                 eval_buffer.clear()
 
             # ---- SINGLE OUTPUT LOCATION ----
-            if accept:
-                output_fh.write(epdline + "\n")
+            if accept:               
+                output_fh.write("|".join([fen, str(score_w), str(result)]) + "\n")
 
     # final flush
     if eval_buffer:
