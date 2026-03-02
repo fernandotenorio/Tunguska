@@ -35,6 +35,7 @@
 bin/
 data/
 raw_data/
+checkpoints/
 torch/*
 !torch/*.py
 !torch/*.h
