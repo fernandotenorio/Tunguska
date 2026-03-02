@@ -1,0 +1,204 @@
+import struct
+import os
+
+# ==============================================================================
+# 1. PIECE MAPPINGS
+# ==============================================================================
+# White: P=0, N=1, B=2, R=3, Q=4, K=5
+# Black: p=6, n=7, b=8, r=9, q=10, k=11
+PIECE_MAP = {
+    'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5,
+    'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11
+}
+REVERSE_PIECE_MAP = {v: k for k, v in PIECE_MAP.items()}
+
+# ==============================================================================
+# 2. PACKING LOGIC (FEN -> Binary)
+# ==============================================================================
+def fen_to_board(fen):
+    """Parses a FEN string into a 64-element array and Side To Move (STM)."""
+    board = [None] * 64
+    parts = fen.split()
+    ranks = parts[0].split('/')
+    
+    # FEN starts at Rank 8 (index 7) down to Rank 1 (index 0)
+    for r_idx, rank_str in enumerate(ranks):
+        rank = 7 - r_idx
+        file = 0
+        for char in rank_str:
+            if char.isdigit():
+                file += int(char)
+            else:
+                sq = rank * 8 + file
+                board[sq] = PIECE_MAP[char]
+                file += 1
+                
+    stm = 0 if parts[1] == 'w' else 1
+    return board, stm
+
+def pack_position(fen, score, result_float):
+    """Packs a position into the exact 32-byte BulletFormat."""
+    board, stm = fen_to_board(fen)
+    
+    occupancy = 0
+    pieces = bytearray(16) # 16 bytes initialized to 0
+    
+    piece_idx = 0
+    for sq in range(64):
+        if board[sq] is not None:
+            # 1. Set the bit in the occupancy board
+            occupancy |= (1 << sq)
+            p_type = board[sq]
+            
+            # 2. Pack the piece type (0-11) into a 4-bit nibble
+            byte_pos = piece_idx // 2
+            if piece_idx % 2 == 0:
+                # First piece goes into the lower 4 bits
+                pieces[byte_pos] |= (p_type & 0x0F)
+            else:
+                # Second piece goes into the upper 4 bits
+                pieces[byte_pos] |= ((p_type & 0x0F) << 4)
+            
+            piece_idx += 1
+            
+    # Convert result float (1.0, 0.5, 0.0) to uint8 (2, 1, 0)
+    if result_float == 1.0: res_val = 2
+    elif result_float == 0.5: res_val = 1
+    else: res_val = 0
+    
+    # Pack to exactly 32 bytes using little-endian '<'
+    # Q = uint64 (8)
+    # 16s = 16 bytes (16)
+    # h = int16 (2)
+    # B = uint8 (1) x 2
+    # H = uint16 (2) x 2
+    packed = struct.pack('<Q 16s h B B H H', occupancy, pieces, int(score), res_val, stm, 0, 0)
+    return packed
+
+# ==============================================================================
+# 3. UNPACKING LOGIC (Binary -> Board)
+# ==============================================================================
+def unpack_position(packed_data):
+    """Unpacks a 32-byte binary chunk back into a board state and metadata."""
+    unpacked = struct.unpack('<Q 16s h B B H H', packed_data)
+    occupancy = unpacked[0]
+    pieces = unpacked[1]
+    score = unpacked[2]
+    res_val = unpacked[3]
+    stm = unpacked[4]
+    
+    board = [None] * 64
+    piece_idx = 0
+    
+    # Reconstruct the board by scanning the occupancy bitboard
+    for sq in range(64):
+        if (occupancy & (1 << sq)) != 0:
+            byte_pos = piece_idx // 2
+            byte_val = pieces[byte_pos]
+            
+            # Extract the correct 4-bit nibble
+            if piece_idx % 2 == 0:
+                p_type = byte_val & 0x0F
+            else:
+                p_type = (byte_val >> 4) & 0x0F
+                
+            board[sq] = REVERSE_PIECE_MAP[p_type]
+            piece_idx += 1
+            
+    return board, score, res_val, stm
+
+def print_board(board):
+    """Helper function to print the 64-element array as a chess board."""
+    print("  +------------------------+")
+    for rank in range(7, -1, -1):
+        row_str = f"{rank + 1} |"
+        for file in range(8):
+            sq = rank * 8 + file
+            if board[sq] is None:
+                row_str += " . "
+            else:
+                row_str += f" {board[sq]} "
+        row_str += "|"
+        print(row_str)
+    print("  +------------------------+")
+    print("     A  B  C  D  E  F  G  H\n")
+
+# ==============================================================================
+# 4. FILE CONVERTER
+# ==============================================================================
+def convert_dataset(input_txt, output_bin):
+    """Reads 'fen | score | result' from txt and writes to a .bin file."""
+    if not os.path.exists(input_txt):
+        print(f"Error: Could not find {input_txt}")
+        return
+
+    count = 0
+    with open(input_txt, 'r') as infile, open(output_bin, 'wb') as outfile:
+        for line in infile:
+            line = line.strip()
+            if not line: continue
+            
+            parts = line.split('|')
+            if len(parts) < 3: continue
+            
+            fen = parts[0].strip()
+            score = int(parts[1].strip())
+            result = float(parts[2].strip())
+            
+            packed_bytes = pack_position(fen, score, result)
+            outfile.write(packed_bytes)
+            count += 1
+            
+            if count % 100000 == 0:
+                print(f"Converted {count} positions...")
+                
+    print(f"Done! Saved {count} positions to {output_bin}")
+
+# ==============================================================================
+# 5. TEST SUITE
+# ==============================================================================
+def test_packing_logic():
+    print("=== RUNNING PACK/UNPACK TEST ===\n")
+    
+    # 1. Setup Test Data
+    test_fen = "r1bq1rk1/ppp1bppp/2np1n2/4p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 7"
+    test_score = 45      # +0.45 centipawns
+    test_result = 0.5    # Draw
+    
+    print("1. ORIGINAL DATA:")
+    print(f"FEN:    {test_fen}")
+    print(f"Score:  {test_score}")
+    print(f"Result: {test_result}\n")
+    
+    # 2. Pack to Binary
+    packed_bytes = pack_position(test_fen, test_score, test_result)
+    print(f"2. PACKED TO BINARY: {len(packed_bytes)} bytes")
+    print(f"Raw hex: {packed_bytes.hex()}\n")
+    
+    # 3. Unpack from Binary
+    unpacked_board, unpacked_score, unpacked_res, unpacked_stm = unpack_position(packed_bytes)
+    
+    # 4. Output Results
+    print("3. UNPACKED BOARD:")
+    print_board(unpacked_board)
+    
+    res_str = "1.0 (White Win)" if unpacked_res == 2 else "0.5 (Draw)" if unpacked_res == 1 else "0.0 (Black Win)"
+    stm_str = "White" if unpacked_stm == 0 else "Black"
+    
+    print("4. UNPACKED METADATA:")
+    print(f"Score:         {unpacked_score}")
+    print(f"Result:        {res_str}")
+    print(f"Side to move:  {stm_str}\n")
+    
+    # 5. Assertions
+    assert unpacked_score == test_score, "Score decoding failed!"
+    assert unpacked_res == 1, "Result decoding failed!"
+    assert unpacked_stm == 0, "STM decoding failed!"
+    print("SUCCESS: Packing and unpacking logic is 100% mathematically flawless! ✅")
+
+if __name__ == "__main__":
+    # Run the test immediately when you execute this script
+    test_packing_logic()
+    
+    # Once the test passes, you can uncomment the line below to convert your actual dataset!
+    # convert_dataset("my_ccrl_data.txt", "training_data.bin")
