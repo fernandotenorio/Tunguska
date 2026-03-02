@@ -182,22 +182,33 @@ def train(bin_path, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resu
 
 
 def save_npz(checkpoint_path, outfile):
-    model = PerspectiveNNUE()
+    print(f"Loading checkpoint {checkpoint_path}...")
     
-    # 1. Load the full checkpoint dictionary (force CPU to avoid device mismatch)
+    # 1. Load the checkpoint dictionary (force CPU to avoid device mismatch)
     checkpoint_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     
-    # 2. Extract ONLY the model weights
-    model.load_state_dict(checkpoint_dict['model_state_dict'])
+    # 2. Extract ONLY the model weights from our new checkpoint structure
+    state_dict = checkpoint_dict['model_state_dict']
     
-    # 3. Save to npz
-    weights = {key: value.cpu().numpy() for key, value in model.state_dict().items()}
+    # 3. Map the new keys and shapes to your old C++ expectations
+    weights = {}
+    
+    # ft.weight -> accumulator.weight
+    weights['accumulator.weight'] = state_dict['ft.weight'].numpy()
+    
+    # ft.bias -> accumulator.bias
+    weights['accumulator.bias'] = state_dict['ft.bias'].numpy()
+    
+    # out.weight -> output_weights
+    weights['output_weights'] = state_dict['out.weight'].numpy().T
+    
+    # out.bias -> output_bias
+    weights['output_bias'] = state_dict['out.bias'].numpy()
+    
+    # 4. Save to .npz
     np.savez(f"{outfile}.npz", **weights)
-    print(f"Successfully saved weights to {outfile}.npz")
+    print(f"Successfully saved weights for C++ to {outfile}.npz")
 
-# ==============================================================================
-# 5. EVALUATION / VALIDATION FUNCTION
-# ==============================================================================
 
 def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

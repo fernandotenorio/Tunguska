@@ -49,17 +49,12 @@ public:
 
     // Perform forward pass
     float forward(Eigen::VectorXf x_white, Eigen::VectorXf x_black, Side stm);
-
-
     void setAccumulator(NNUEAccumulator& new_acc, const std::vector<int>& active_features, Side stm);
     void setAccumulator(NNUEAccumulator& new_acc, const std::vector<int>& active_idxs, int cnt, Side stm);
     void setAccumulator(const Board& board);
     void updateAccumulator(const FeatureChanges& changes);
     void updateAccumulatorUndo(const FeatureChanges& changes);
-
-  
     float computeOutput(Side stm);
-    
 };
 
 #endif // NNUE_H

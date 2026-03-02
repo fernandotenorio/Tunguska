@@ -103,20 +103,29 @@ void NNUELoader::updateAccumulatorUndo(const FeatureChanges& changes)
     }
 }
 
-
 float NNUELoader::computeOutput(Side stm) {
-    combined_accumulator.head(HL_SIZE) = Eigen::Map<const Eigen::VectorXf>(accumulator[stm], HL_SIZE);
-    combined_accumulator.tail(HL_SIZE) = Eigen::Map<const Eigen::VectorXf>(accumulator[static_cast<Side>(1 - stm)], HL_SIZE);
+    // 1. Load Accumulators for the current perspective
+    // Note: cwiseMax(0.0) is ReLU. cwiseMin(1.0) clips it.
+    
+    // US (stm)
+    combined_accumulator.head(HL_SIZE) = 
+        Eigen::Map<const Eigen::VectorXf>(accumulator[stm], HL_SIZE)
+        .cwiseMax(0.0f).cwiseMin(1.0f);
 
+    // THEM (1-stm)
+    combined_accumulator.tail(HL_SIZE) = 
+        Eigen::Map<const Eigen::VectorXf>(accumulator[static_cast<Side>(1 - stm)], HL_SIZE)
+        .cwiseMax(0.0f).cwiseMin(1.0f);
+
+    // 2. Final Dot Product
     float eval_raw = combined_accumulator.dot(output_weights) + output_bias;
     return eval_raw * SCALE;
 }
 
-
 float NNUELoader::forward(Eigen::VectorXf x_white, Eigen::VectorXf x_black, Side stm) {
     // Compute accumulator for both white and black pieces
-    Eigen::VectorXf white_accumulator = ((accumulator_weight * x_white) + accumulator_bias).cwiseMax(0).cwiseMin(QA);
-    Eigen::VectorXf black_accumulator = ((accumulator_weight * x_black) + accumulator_bias).cwiseMax(0).cwiseMin(QA);
+    Eigen::VectorXf white_accumulator = ((accumulator_weight * x_white) + accumulator_bias).cwiseMax(0).cwiseMin(1);
+    Eigen::VectorXf black_accumulator = ((accumulator_weight * x_black) + accumulator_bias).cwiseMax(0).cwiseMin(1);
 
     // Combine accumulators based on which side is to move
     Eigen::VectorXf combined_accumulator(2 * HL_SIZE);
@@ -131,5 +140,5 @@ float NNUELoader::forward(Eigen::VectorXf x_white, Eigen::VectorXf x_black, Side
     float eval_raw = combined_accumulator.dot(output_weights) + output_bias;
 
     // Return the scaled result
-    return eval_raw * SCALE / (QA * QB);
+    return eval_raw * SCALE;
 }
