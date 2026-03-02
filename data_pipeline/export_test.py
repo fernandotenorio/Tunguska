@@ -1,6 +1,6 @@
 import struct
 import os
-
+from glob import glob
 # ==============================================================================
 # 1. PIECE MAPPINGS
 # ==============================================================================
@@ -126,31 +126,32 @@ def print_board(board):
 # ==============================================================================
 # 4. FILE CONVERTER
 # ==============================================================================
-def convert_dataset(input_txt, output_bin):
+def convert_dataset(input_folder, output_bin):
     """Reads 'fen | score | result' from txt and writes to a .bin file."""
-    if not os.path.exists(input_txt):
-        print(f"Error: Could not find {input_txt}")
-        return
+    
+    epd_files = glob(os.path.join(input_folder, "*.epd"))
 
     count = 0
-    with open(input_txt, 'r') as infile, open(output_bin, 'wb') as outfile:
-        for line in infile:
-            line = line.strip()
-            if not line: continue
-            
-            parts = line.split('|')
-            if len(parts) < 3: continue
-            
-            fen = parts[0].strip()
-            score = int(parts[1].strip())
-            result = float(parts[2].strip())
-            
-            packed_bytes = pack_position(fen, score, result)
-            outfile.write(packed_bytes)
-            count += 1
-            
-            if count % 100000 == 0:
-                print(f"Converted {count} positions...")
+    with open(output_bin, 'wb') as outfile:
+        for fl in epd_files:
+            epd_lines = open(fl).readlines()
+            for line in epd_lines:
+                line = line.strip()
+                if not line: continue
+                
+                parts = line.split('|')
+                if len(parts) < 3: continue
+                
+                fen = parts[0].strip()
+                score = int(parts[1].strip())
+                result = float(parts[2].strip())
+                
+                packed_bytes = pack_position(fen, score, result)
+                outfile.write(packed_bytes)
+                count += 1
+                
+                if count % 100000 == 0:
+                    print(f"Converted {count} positions...")
                 
     print(f"Done! Saved {count} positions to {output_bin}")
 
@@ -198,7 +199,7 @@ def test_packing_logic():
 
 if __name__ == "__main__":
     # Run the test immediately when you execute this script
-    test_packing_logic()
+    # test_packing_logic()
     
     # Once the test passes, you can uncomment the line below to convert your actual dataset!
-    # convert_dataset("my_ccrl_data.txt", "training_data.bin")
+    convert_dataset("../data/quiet", "../data/training_data.bin")
