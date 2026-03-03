@@ -12,6 +12,7 @@ int main() {
 	Zobrist::init_keys();
 	Evaluation::initAll();
 	Magic::magicArraysInit();
+	Search::init_search();
 	UCI::loop();
 	
 	// Board board = Board::fromFEN("8/4k3/3ppp2/8/8/1B6/B7/K7 w - - 0 1");

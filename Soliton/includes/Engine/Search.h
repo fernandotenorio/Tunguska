@@ -5,6 +5,7 @@
 #include "Move.h"
 #include <chrono>
 #include <atomic>
+#include "nnue_loader.h"
 
 class Search {
 public:
@@ -21,7 +22,15 @@ public:
         std::atomic<bool> stopped;
     };
 
+    // NNUE
+    static NNUENetwork nnue_net;
+    static NNUEState nnue_state;
+
+    // MVV
+    static int MVV_LVA[14][14];
+
     static void historyStats(Board& board);
+    static void init_search();
 
     // Updated entry point
     static int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose);

@@ -1,109 +1,113 @@
 #include "nnue_loader.h"
+#include "Engine/Board.h"
+#include "FeatureExtractor.h"
 #include "cnpy.h"
-#include <Eigen/Dense>
-#include <Engine/Board.h>
-
-NNUELoader* NNUELoader::instance = nullptr; // Initialize the static instance
+#include <iostream>
 
 
-void NNUELoader::loadWeights(const std::string& filename) {
+
+// =========================================================
+// 1. NNUENetwork (Static Weights)
+// =========================================================
+Eigen::MatrixXf NNUENetwork::accumulator_weight;
+Eigen::VectorXf NNUENetwork::output_weights;
+Eigen::VectorXf NNUENetwork::accumulator_bias;
+float NNUENetwork::output_bias = 0.0f;
+bool NNUENetwork::weights_loaded = false;
+
+void NNUENetwork::loadWeights(const std::string& filename) {
     if (weights_loaded) {
         return;
     }
     cnpy::npz_t npz = cnpy::npz_load(filename);
-    //std::cout << npz["accumulator.bias"].shape[0] << std::endl;
 
     using RowMajorMatrixXf = Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
     accumulator_weight = Eigen::Map<RowMajorMatrixXf>(npz["accumulator.weight"].data<float>(), HL_SIZE, INPUT_SIZE);
     output_weights = Eigen::Map<Eigen::VectorXf>(npz["output_weights"].data<float>(), 2 * HL_SIZE);
     accumulator_bias = Eigen::Map<Eigen::VectorXf>(npz["accumulator.bias"].data<float>(), HL_SIZE);
     output_bias = npz["output_bias"].data<float>()[0];
-
-    // Initialize combined_accumulator
-    combined_accumulator.resize(2 * accumulator_bias.size());
-    combined_accumulator.setZero();
-    std::cout << "NNUE Weights loaded." << std::endl;
     weights_loaded = true;
+    std::cout << "NNUE Weights loaded." << std::endl;
 }
 
-//active_features is a INPUT_SIZE binary vector
-void NNUELoader::setAccumulator(NNUEAccumulator& new_acc, const std::vector<int>& active_features, Side stm) {
-    // Initialize with bias
-    Eigen::VectorXf acc = accumulator_bias;
 
-    for (size_t idx = 0; idx < active_features.size(); idx++) {
-        if (active_features[idx]) {
-            acc += accumulator_weight.col(idx);
-        }
-    }
-    std::memcpy(new_acc[stm], acc.data(), HL_SIZE * sizeof(float));
+// =========================================================
+// 2. NNUEState (Thread-Local Calculation)
+// =========================================================
+
+NNUEState::NNUEState() {
+    combined_accumulator.resize(2 * HL_SIZE);
+    combined_accumulator.setZero();
 }
 
-//active_idxs holds sequence of idxs
-void NNUELoader::setAccumulator(NNUEAccumulator& new_acc, const std::vector<int>& active_idxs, int cnt, Side stm) {
-    // Initialize with bias
-    Eigen::VectorXf acc = accumulator_bias;
+void NNUEState::init(const Board& board) {
+    if (!NNUENetwork::weights_loaded) return;
 
-    for (size_t i = 0; i < cnt; i++) {
-        acc += accumulator_weight.col(active_idxs[i]);
-    }
-    std::memcpy(new_acc[stm], acc.data(), HL_SIZE * sizeof(float));
-}
-
-void NNUELoader::setAccumulator(const Board& board) {    
-    //auto [white_features, black_features] = FeatureExtractor::extractFeatures(board);
-    initialFeatures.reset();
+    // Reset features helper
+    StartingFeatures initialFeatures;
     FeatureExtractor::extractFeatures(board, initialFeatures);
-    this->setAccumulator(this->accumulator, initialFeatures.white_feats_idx, initialFeatures.white_feats_cnt, WHITE_NNUE);
-    this->setAccumulator(this->accumulator, initialFeatures.black_feats_idx, initialFeatures.black_feats_cnt, BLACK_NNUE);
-    //this->setAccumulator(this->accumulator, white_features, WHITE_NNUE);
-    //this->setAccumulator(this->accumulator, black_features, BLACK_NNUE);
+
+    // Initialize accumulators with bias
+    Eigen::VectorXf acc_w = NNUENetwork::accumulator_bias;
+    Eigen::VectorXf acc_b = NNUENetwork::accumulator_bias;
+
+    // Add weights for all active features
+    for(int idx : initialFeatures.white_feats_idx) {
+        acc_w += NNUENetwork::accumulator_weight.col(idx);
+    }
+    for(int idx : initialFeatures.black_feats_idx) {
+        acc_b += NNUENetwork::accumulator_weight.col(idx);
+    }
+
+    // Copy to internal struct
+    std::memcpy(accumulator.v[WHITE_NNUE], acc_w.data(), HL_SIZE * sizeof(float));
+    std::memcpy(accumulator.v[BLACK_NNUE], acc_b.data(), HL_SIZE * sizeof(float));
 }
 
 
-void NNUELoader::updateAccumulator(const FeatureChanges& changes)
+void NNUEState::update(const FeatureChanges& changes)
 {
     //white
     Eigen::Map<Eigen::VectorXf> acc_w(accumulator[WHITE_NNUE], HL_SIZE);
     for (size_t i = 0; i < changes.add_white_count; i++) {
-        acc_w += accumulator_weight.col(changes.add_white[i]);
+        acc_w += NNUENetwork::accumulator_weight.col(changes.add_white[i]);
     }
     for (size_t i = 0; i < changes.rem_white_count; i++) {
-        acc_w -= accumulator_weight.col(changes.rem_white[i]);
+        acc_w -= NNUENetwork::accumulator_weight.col(changes.rem_white[i]);
     }
 
     //black
     Eigen::Map<Eigen::VectorXf> acc_b(accumulator[BLACK_NNUE], HL_SIZE);
     for (size_t i = 0; i < changes.add_black_count; i++) {
-        acc_b += accumulator_weight.col(changes.add_black[i]);
+        acc_b += NNUENetwork::accumulator_weight.col(changes.add_black[i]);
     }
     for (size_t i = 0; i < changes.rem_black_count; i++) {
-        acc_b -= accumulator_weight.col(changes.rem_black[i]);
+        acc_b -= NNUENetwork::accumulator_weight.col(changes.rem_black[i]);
     }
 }
 
-void NNUELoader::updateAccumulatorUndo(const FeatureChanges& changes)
+void NNUEState::updateUndo(const FeatureChanges& changes)
 {
     //white
     Eigen::Map<Eigen::VectorXf> acc_w(accumulator[WHITE_NNUE], HL_SIZE);
     for (size_t i = 0; i < changes.add_white_count; i++) {
-        acc_w -= accumulator_weight.col(changes.add_white[i]);
+        acc_w -= NNUENetwork::accumulator_weight.col(changes.add_white[i]);
     }
     for (size_t i = 0; i < changes.rem_white_count; i++) {
-        acc_w += accumulator_weight.col(changes.rem_white[i]);
+        acc_w += NNUENetwork::accumulator_weight.col(changes.rem_white[i]);
     }
 
     //black
     Eigen::Map<Eigen::VectorXf> acc_b(accumulator[BLACK_NNUE], HL_SIZE);
     for (size_t i = 0; i < changes.add_black_count; i++) {
-        acc_b -= accumulator_weight.col(changes.add_black[i]);
+        acc_b -= NNUENetwork::accumulator_weight.col(changes.add_black[i]);
     }
     for (size_t i = 0; i < changes.rem_black_count; i++) {
-        acc_b += accumulator_weight.col(changes.rem_black[i]);
+        acc_b += NNUENetwork::accumulator_weight.col(changes.rem_black[i]);
     }
 }
 
-float NNUELoader::computeOutput(Side stm) {
+float NNUEState::evaluate(Side stm) {
     // 1. Load Accumulators for the current perspective
     // Note: cwiseMax(0.0) is ReLU. cwiseMin(1.0) clips it.
     
@@ -118,10 +122,11 @@ float NNUELoader::computeOutput(Side stm) {
         .cwiseMax(0.0f).cwiseMin(1.0f);
 
     // 2. Final Dot Product
-    float eval_raw = combined_accumulator.dot(output_weights) + output_bias;
+    float eval_raw = combined_accumulator.dot(NNUENetwork::output_weights) + NNUENetwork::output_bias;
     return eval_raw * SCALE;
 }
 
+/*
 float NNUELoader::forward(Eigen::VectorXf x_white, Eigen::VectorXf x_black, Side stm) {
     // Compute accumulator for both white and black pieces
     Eigen::VectorXf white_accumulator = ((accumulator_weight * x_white) + accumulator_bias).cwiseMax(0).cwiseMin(1);
@@ -142,3 +147,4 @@ float NNUELoader::forward(Eigen::VectorXf x_white, Eigen::VectorXf x_black, Side
     // Return the scaled result
     return eval_raw * SCALE;
 }
+*/

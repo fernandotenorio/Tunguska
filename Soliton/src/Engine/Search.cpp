@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <vector>
 
+
 Search::SearchParams Search::params;
 
 void Search::stop() {
@@ -26,12 +27,14 @@ void Search::checkTime() {
     }
 }
 
-// MVV-LVA table [Victim][Attacker]
-static int MVV_LVA[14][14];
-static bool mvv_init = false;
+// MVV-LVA table
+int Search::MVV_LVA[14][14];
 
-void init_mvv() {
-    if (mvv_init) return;
+// NNUE
+NNUENetwork Search::nnue_net;
+NNUEState Search::nnue_state;
+
+void Search::init_search() {
     int values[] = { 0, 0, 
         Evaluation::PAWN_VAL, Evaluation::PAWN_VAL, Evaluation::KNIGHT_VAL, Evaluation::KNIGHT_VAL,
 		Evaluation::BISHOP_VAL, Evaluation::BISHOP_VAL, Evaluation::ROOK_VAL, Evaluation::ROOK_VAL,
@@ -42,7 +45,9 @@ void init_mvv() {
             MVV_LVA[v][a] = values[v] + 10 - (values[a] / 100);
         }
     }
-    mvv_init = true;
+
+    // NNUE
+    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\network10.npz");
 }
 
 void Search::historyStats(Board& board){
@@ -69,7 +74,8 @@ void Search::historyStats(Board& board){
 }
 
 int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose) {
-    init_mvv();
+    nnue_state.init(board);
+
     params.nodes = 0;
     params.stopped = false;
     params.bestMove = Move::NO_MOVE;
@@ -124,7 +130,8 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
 }
 
 int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool verbose) {
-    init_mvv();
+    nnue_state.init(board);
+
     params.nodes = 0;
     params.stopped = false;
     params.bestMove = Move::NO_MOVE;
