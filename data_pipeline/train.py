@@ -81,8 +81,9 @@ class PerspectiveNNUEDataset(Dataset):
 class PerspectiveNNUE(nn.Module):
     def __init__(self):
         super(PerspectiveNNUE, self).__init__()
-        self.ft = nn.Linear(768, 256)
-        self.out = nn.Linear(512, 1)
+        self.HL = 64
+        self.ft = nn.Linear(768, self.HL)
+        self.out = nn.Linear(2 * self.HL, 1)
 
     def forward(self, w_features, b_features, stm):
         w_acc = self.ft(w_features)
@@ -91,7 +92,7 @@ class PerspectiveNNUE(nn.Module):
         b_acc = self.ft(b_features)
         b_acc = torch.clamp(b_acc, 0.0, 1.0) 
 
-        combined = torch.zeros(w_acc.shape[0], 512, device=w_acc.device)
+        combined = torch.zeros(w_acc.shape[0], 2 * self.HL, device=w_acc.device)
         
         white_to_move = (stm == 0.0).squeeze(-1)
         black_to_move = ~white_to_move
@@ -109,7 +110,7 @@ class PerspectiveNNUE(nn.Module):
 # 3. BLENDED LOSS FUNCTION
 # ==============================================================================
 
-def blended_loss(outputs, scores, results, blend_ratio=0.5):
+def blended_loss(outputs, scores, results, blend_ratio=0.7):
     score_wdl = torch.sigmoid(scores / 400.0)
     target = blend_ratio * score_wdl + (1.0 - blend_ratio) * results
     net_wdl = torch.sigmoid(outputs)
@@ -158,7 +159,7 @@ def train(bin_path, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resu
 
             optimizer.zero_grad()
             outputs = model(w_feat, b_feat, stm)
-            loss = blended_loss(outputs, scores, results, blend_ratio=0.5) 
+            loss = blended_loss(outputs, scores, results, blend_ratio=0.7) 
             
             loss.backward()
             optimizer.step()
@@ -215,7 +216,7 @@ def save_npz(checkpoint_path, outfile):
     print(f"Successfully saved weights for C++ to {outfile}.npz")
 
 
-def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192):
+def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192, blend_ratio=0.7):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\nEvaluating Checkpoint: {checkpoint_path} on {device}")
 
@@ -256,7 +257,7 @@ def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192):
             # --- 1. WDL Metrics (What the network trained to minimize) ---
             net_wdl = torch.sigmoid(outputs)
             score_wdl = torch.sigmoid(scores / 400.0)
-            target_wdl = 0.5 * score_wdl + 0.5 * results # Blended target
+            target_wdl = blend_ratio * score_wdl + (1.0 - blend_ratio) * results # Blended target
             
             # Squared error sum for the batch
             wdl_se = torch.sum((net_wdl - target_wdl) ** 2).item()
