@@ -296,7 +296,7 @@ def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192):
     print("="*40 + "\n")
 
 
-def gen_all_weights()
+def gen_all_weights():
     from glob import glob
     nets = glob("../checkpoints/*.pt")
     for net in nets:
