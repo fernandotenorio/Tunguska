@@ -5,7 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
-
+#include "FeatureExtractor.h"
 
 Search::SearchParams Search::params;
 
@@ -47,7 +47,7 @@ void Search::init_search() {
     }
 
     // NNUE
-    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\network10.npz");
+    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_10.npz");
 }
 
 void Search::historyStats(Board& board){
@@ -202,7 +202,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
     // Safety check for search depth to prevent stack overflow in extreme tactical scenarios
     if (board.ply >= Board::MAX_DEPTH - 1) {
-        return Evaluation::evaluate(board);
+        //return Evaluation::evaluate(board);
+        return nnue_state.evaluate(board.state.currentPlayer == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
     }
 
     params.nodes++;
@@ -225,7 +226,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     if (!inCheck) {
         // We calculate staticEval once if we are at low depths (RFP goes up to depth 5)
         if (depth <= 5) {
-            staticEval = Evaluation::evaluate(board);
+            //staticEval = Evaluation::evaluate(board);
+            staticEval = nnue_state.evaluate(side == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
             
             // 1. Reverse Futility Pruning (Static Null Move Pruning)
             // If we are not in a mate sequence, and the position is so good that 
@@ -277,8 +279,15 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
     for (int i = 0; i < moves.size(); i++) {
         int move = moves.get(i);
+
+        FeatureChanges changes = FeatureExtractor::moveDiffFeatures(board, move);
+        nnue_state.update(changes);
         BoardState undo = board.makeMove(move);
-        if (!undo.valid) continue;
+
+        if (!undo.valid) {
+            nnue_state.updateUndo(changes);
+            continue;
+        }
 
         legalMovesCount++;
         //int oppKingSQ = board.kingSQ[board.state.currentPlayer];
@@ -294,6 +303,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
             int promoted = Move::promoteTo(move);
             
             if (captured == Board::EMPTY && promoted == Board::EMPTY) {
+                nnue_state.updateUndo(changes);
                 board.undoMove(move, undo);
                 continue;
             }
@@ -341,6 +351,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
             score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
         }
 
+        nnue_state.updateUndo(changes);
         board.undoMove(move, undo);
 
         if (params.stopped) return 0;
@@ -465,7 +476,8 @@ int Search::quiescence(Board& board, int alpha, int beta) {
 
     // Safety: Prevent stack overflow
     if (board.ply >= Board::MAX_DEPTH - 1) {
-        return Evaluation::evaluate(board);
+        //return Evaluation::evaluate(board);
+        return nnue_state.evaluate(board.state.currentPlayer == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
     }
 
     // 3. Check State Analysis
@@ -476,7 +488,8 @@ int Search::quiescence(Board& board, int alpha, int beta) {
     int standPat = -Search::INFINITE;
 
     if (!inCheck) {
-        standPat = Evaluation::evaluate(board);
+        //standPat = Evaluation::evaluate(board);
+        standPat = nnue_state.evaluate(board.state.currentPlayer == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
 
         if (standPat >= beta) {
             return beta;
@@ -528,12 +541,20 @@ int Search::quiescence(Board& board, int alpha, int beta) {
             }
         }
 
+        FeatureChanges changes = FeatureExtractor::moveDiffFeatures(board, move);
+		nnue_state.update(changes);
         BoardState undo = board.makeMove(move);
-        if (!undo.valid) continue;
+
+        if (!undo.valid) {
+            nnue_state.updateUndo(changes);
+            continue;
+        }
 
         legalMoves++;
 
         int score = -quiescence(board, -beta, -alpha);
+
+        nnue_state.updateUndo(changes);
         board.undoMove(move, undo);
 
         if (params.stopped) return 0;

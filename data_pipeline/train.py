@@ -64,7 +64,12 @@ class PerspectiveNNUEDataset(Dataset):
         elif row['result'] == 1: result = 0.5
         else: result = 0.0
 
-        stm = float(row['stm']) 
+        stm = float(row['stm'])
+
+        # ---> FLIP TARGETS FOR BLACK'S PERSPECTIVE <---
+        if stm == 1.0: 
+            score = -score              # Ensure the score is relative to US
+            result = 1.0 - result       # Ensure the result is relative to US
 
         return w_features, b_features, torch.tensor([stm], dtype=torch.float32), \
                torch.tensor([score], dtype=torch.float32), torch.tensor([result], dtype=torch.float32)
@@ -291,17 +296,23 @@ def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192):
     print("="*40 + "\n")
 
 
+def gen_all_weights()
+    from glob import glob
+    nets = glob("../checkpoints/*.pt")
+    for net in nets:
+        epoch = net.split("_")[-1].replace(".pt", "")
+        save_npz(net, f"net_{epoch}")
+
 if __name__ == "__main__":
     training_file = "../data/train/train.bin"
     checkpoint_folder = "../checkpoints"
 
-    evaluate_checkpoint(training_file, os.path.join(checkpoint_folder, "nnue_epoch_10.pt"))
+    # evaluate_checkpoint(training_file, os.path.join(checkpoint_folder, "nnue_epoch_10.pt"))
     
-    # if os.path.exists(training_file):
-    #     # To start fresh:
-    #     train(training_file, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3)
+    if os.path.exists(training_file):
+        train(training_file, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3)
         
-    #     # To resume from a crash at epoch 5, you would change it to this:
-    #     # train(training_file, epochs=10, batch_size=8192, lr=1e-3, resume_from="checkpoints/nnue_epoch_5.pt")
-    # else:
-    #     print(f"File {training_file} not found.")
+        # To resume from epoch 5
+        # train(training_file, epochs=10, batch_size=8192, lr=1e-3, resume_from="checkpoints/nnue_epoch_5.pt")
+    else:
+        print(f"File {training_file} not found.")

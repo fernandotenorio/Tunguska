@@ -41,7 +41,6 @@ class NNUEState {
 public:
     NNUEAccumulator accumulator;
     Eigen::VectorXf combined_accumulator;
-    //StartingFeatures initialFeatures;
 
     NNUEState();
     
@@ -55,7 +54,7 @@ public:
     void updateUndo(const FeatureChanges& changes);
 
     // Calculate final score
-    float evaluate(Side stm);
+    int evaluate(Side stm);
 };
 
 #endif // NNUELOADER_H

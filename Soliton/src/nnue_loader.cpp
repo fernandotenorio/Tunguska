@@ -42,72 +42,82 @@ NNUEState::NNUEState() {
 
 void NNUEState::init(const Board& board) {
     if (!NNUENetwork::weights_loaded) return;
-
-    // Reset features helper
+    
+    // Use stack-allocated struct (No heap malloc!)
     StartingFeatures initialFeatures;
     FeatureExtractor::extractFeatures(board, initialFeatures);
 
-    // Initialize accumulators with bias
+    // Start with Bias
     Eigen::VectorXf acc_w = NNUENetwork::accumulator_bias;
     Eigen::VectorXf acc_b = NNUENetwork::accumulator_bias;
 
-    // Add weights for all active features
-    for(int idx : initialFeatures.white_feats_idx) {
-        acc_w += NNUENetwork::accumulator_weight.col(idx);
-    }
-    for(int idx : initialFeatures.black_feats_idx) {
-        acc_b += NNUENetwork::accumulator_weight.col(idx);
+    // Add features (Iterate strictly up to count)
+    for(int i = 0; i < initialFeatures.white_feats_cnt; ++i) {
+        acc_w += NNUENetwork::accumulator_weight.col(initialFeatures.white_feats_idx[i]);
     }
 
-    // Copy to internal struct
+    for(int i = 0; i < initialFeatures.black_feats_cnt; ++i) {
+        acc_b += NNUENetwork::accumulator_weight.col(initialFeatures.black_feats_idx[i]);
+    }
+
+    // Copy to persistent accumulator state
     std::memcpy(accumulator.v[WHITE_NNUE], acc_w.data(), HL_SIZE * sizeof(float));
     std::memcpy(accumulator.v[BLACK_NNUE], acc_b.data(), HL_SIZE * sizeof(float));
 }
 
+void NNUEState::update(const FeatureChanges& changes) {
+    // Map existing accumulator memory to Eigen Vector for easy math
+    Eigen::Map<Eigen::VectorXf> acc_w(accumulator.v[WHITE_NNUE], HL_SIZE);
+    Eigen::Map<Eigen::VectorXf> acc_b(accumulator.v[BLACK_NNUE], HL_SIZE);
 
-void NNUEState::update(const FeatureChanges& changes)
-{
-    //white
-    Eigen::Map<Eigen::VectorXf> acc_w(accumulator[WHITE_NNUE], HL_SIZE);
-    for (size_t i = 0; i < changes.add_white_count; i++) {
-        acc_w += NNUENetwork::accumulator_weight.col(changes.add_white[i]);
-    }
-    for (size_t i = 0; i < changes.rem_white_count; i++) {
+    // --- WHITE ACCUMULATOR ---
+    // Remove old features
+    for (int i = 0; i < changes.rem_white_count; ++i) {
         acc_w -= NNUENetwork::accumulator_weight.col(changes.rem_white[i]);
     }
-
-    //black
-    Eigen::Map<Eigen::VectorXf> acc_b(accumulator[BLACK_NNUE], HL_SIZE);
-    for (size_t i = 0; i < changes.add_black_count; i++) {
-        acc_b += NNUENetwork::accumulator_weight.col(changes.add_black[i]);
+    // Add new features
+    for (int i = 0; i < changes.add_white_count; ++i) {
+        acc_w += NNUENetwork::accumulator_weight.col(changes.add_white[i]);
     }
-    for (size_t i = 0; i < changes.rem_black_count; i++) {
+
+    // --- BLACK ACCUMULATOR ---
+    // Remove old features
+    for (int i = 0; i < changes.rem_black_count; ++i) {
         acc_b -= NNUENetwork::accumulator_weight.col(changes.rem_black[i]);
     }
+    // Add new features
+    for (int i = 0; i < changes.add_black_count; ++i) {
+        acc_b += NNUENetwork::accumulator_weight.col(changes.add_black[i]);
+    }
 }
 
-void NNUEState::updateUndo(const FeatureChanges& changes)
-{
-    //white
-    Eigen::Map<Eigen::VectorXf> acc_w(accumulator[WHITE_NNUE], HL_SIZE);
-    for (size_t i = 0; i < changes.add_white_count; i++) {
-        acc_w -= NNUENetwork::accumulator_weight.col(changes.add_white[i]);
-    }
-    for (size_t i = 0; i < changes.rem_white_count; i++) {
+void NNUEState::updateUndo(const FeatureChanges& changes) {
+    // Exact inverse of update
+    Eigen::Map<Eigen::VectorXf> acc_w(accumulator.v[WHITE_NNUE], HL_SIZE);
+    Eigen::Map<Eigen::VectorXf> acc_b(accumulator.v[BLACK_NNUE], HL_SIZE);
+
+    // --- WHITE ACCUMULATOR ---
+    // Undo Removal (Add back)
+    for (int i = 0; i < changes.rem_white_count; ++i) {
         acc_w += NNUENetwork::accumulator_weight.col(changes.rem_white[i]);
     }
-
-    //black
-    Eigen::Map<Eigen::VectorXf> acc_b(accumulator[BLACK_NNUE], HL_SIZE);
-    for (size_t i = 0; i < changes.add_black_count; i++) {
-        acc_b -= NNUENetwork::accumulator_weight.col(changes.add_black[i]);
+    // Undo Addition (Subtract)
+    for (int i = 0; i < changes.add_white_count; ++i) {
+        acc_w -= NNUENetwork::accumulator_weight.col(changes.add_white[i]);
     }
-    for (size_t i = 0; i < changes.rem_black_count; i++) {
+
+    // --- BLACK ACCUMULATOR ---
+    // Undo Removal (Add back)
+    for (int i = 0; i < changes.rem_black_count; ++i) {
         acc_b += NNUENetwork::accumulator_weight.col(changes.rem_black[i]);
+    }
+    // Undo Addition (Subtract)
+    for (int i = 0; i < changes.add_black_count; ++i) {
+        acc_b -= NNUENetwork::accumulator_weight.col(changes.add_black[i]);
     }
 }
 
-float NNUEState::evaluate(Side stm) {
+int NNUEState::evaluate(Side stm) {
     // 1. Load Accumulators for the current perspective
     // Note: cwiseMax(0.0) is ReLU. cwiseMin(1.0) clips it.
     
@@ -123,7 +133,7 @@ float NNUEState::evaluate(Side stm) {
 
     // 2. Final Dot Product
     float eval_raw = combined_accumulator.dot(NNUENetwork::output_weights) + NNUENetwork::output_bias;
-    return eval_raw * SCALE;
+    return (int)(eval_raw * SCALE);
 }
 
 /*
