@@ -47,7 +47,7 @@ void Search::init_search() {
     }
 
     // NNUE
-    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_7.npz");
+    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_2.npz");
 }
 
 void Search::historyStats(Board& board){
