@@ -156,6 +156,87 @@ def convert_dataset(input_folder, output_bin):
     print(f"Done! Saved {count} positions to {output_bin}")
 
 # ==============================================================================
+# converts the plain format given by stockfish convert tool
+# ==============================================================================
+def convert_binpack_plain(input_txt, output_bin):
+    """
+    Reads a plain text representation of a Stockfish binpack.
+    Converts relative scores/results into absolute (White's perspective) 
+    and writes to our custom 32-byte .bin format.
+    """
+    count = 0
+    skipped = 0
+    
+    current_fen = None
+    current_score = None
+    current_result = None
+    
+    print(f"Starting conversion of {input_txt}...")
+    
+    with open(input_txt, 'r') as infile, open(output_bin, 'wb') as outfile:
+        for line in infile:
+            line = line.strip()
+            if not line: continue
+            
+            if line.startswith('fen '):
+                current_fen = line[4:].strip()
+            elif line.startswith('score '):
+                current_score = int(line[6:].strip())
+            elif line.startswith('result '):
+                current_result = int(line[7:].strip())
+            elif line == 'e':
+                # Reached the end of a block, process the position
+                if current_fen and current_score is not None and current_result is not None:
+                    
+                    # 32002 is Stockfish's internal "VALUE_NONE" (unscored position). 
+                    # We must skip these as they don't have a valid evaluation.
+                    if current_score == 32002 or current_score == -32002:
+                        skipped += 1
+                    else:
+                        # Figure out who is to move
+                        parts = current_fen.split()
+                        stm = parts[1]
+                        is_white = (stm == 'w')
+                        
+                        # =========================================================
+                        # 1. SCORE CONVERSION (Relative -> Absolute)
+                        # Binpack score is relative to STM. We need White's perspective.
+                        # =========================================================
+                        abs_score = current_score if is_white else -current_score
+                        
+                        # =========================================================
+                        # 2. RESULT CONVERSION (Relative -> Absolute Float)
+                        # Relative: 1 (Win for STM), 0 (Draw), -1 (Loss for STM)
+                        # Absolute: 1.0 (White Win), 0.5 (Draw), 0.0 (Black Win)
+                        # =========================================================
+                        if current_result == 1:     # Side to move Won
+                            abs_result = 1.0 if is_white else 0.0
+                        elif current_result == -1:  # Side to move Lost
+                            abs_result = 0.0 if is_white else 1.0
+                        else:                       # Draw (0)
+                            abs_result = 0.5
+                            
+                        # Pack it into our 32-byte binary format
+                        packed_bytes = pack_position(current_fen, abs_score, abs_result)
+                        outfile.write(packed_bytes)
+                        count += 1
+                        
+                        if count % 250000 == 0:
+                            print(f"Converted {count} positions... (Skipped {skipped} unscored)")
+                            
+                # Reset for the next record
+                current_fen = None
+                current_score = None
+                current_result = None
+
+    print("-" * 50)
+    print("CONVERSION COMPLETE")
+    print("-" * 50)
+    print(f"Valid positions saved: {count:,}")
+    print(f"Skipped (Score=32002): {skipped:,}")
+    print(f"Saved to: {output_bin}\n")
+
+# ==============================================================================
 # 5. TEST SUITE
 # ==============================================================================
 def test_packing_logic():
@@ -202,4 +283,8 @@ if __name__ == "__main__":
     # test_packing_logic()
     
     # Once the test passes, you can uncomment the line below to convert your actual dataset!
-    convert_dataset("../data/quiet", "../data/training_data.bin")
+    # convert_dataset("../data/quiet", "../data/train/train.bin")
+    convert_binpack_plain(
+        "../data/binpacks/test80-2024-02-feb-2tb7p.min-v2.v6.plain",
+        "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"
+    )
