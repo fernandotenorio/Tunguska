@@ -304,6 +304,10 @@ def gen_all_weights():
         epoch = net.split("_")[-1].replace(".pt", "")
         save_npz(net, f"net_{epoch}")
 
+
+# To resume from epoch 5
+# train(training_file, epochs=10, batch_size=8192, lr=1e-3, resume_from="checkpoints/nnue_epoch_5.pt")
+
 if __name__ == "__main__":
     training_file = "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"
     checkpoint_folder = "../checkpoints"
@@ -311,9 +315,6 @@ if __name__ == "__main__":
     # evaluate_checkpoint(training_file, os.path.join(checkpoint_folder, "nnue_epoch_10.pt"))
     
     if os.path.exists(training_file):
-        train(training_file, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3)
-        
-        # To resume from epoch 5
-        # train(training_file, epochs=10, batch_size=8192, lr=1e-3, resume_from="checkpoints/nnue_epoch_5.pt")
+        train(training_file, checkpoint_folder, epochs=15, batch_size=16384, lr=1e-3)
     else:
         print(f"File {training_file} not found.")
