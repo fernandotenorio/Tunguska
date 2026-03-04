@@ -129,7 +129,7 @@ def train(bin_path, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resu
     os.makedirs(checkpoint_folder, exist_ok=True)
 
     dataset = PerspectiveNNUEDataset(bin_path)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=3)
 
     model = PerspectiveNNUE().to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
