@@ -1,6 +1,7 @@
 import struct
 import os
 from glob import glob
+import numpy as np
 # ==============================================================================
 # 1. PIECE MAPPINGS
 # ==============================================================================
@@ -277,6 +278,67 @@ def test_packing_logic():
     assert unpacked_res == 1, "Result decoding failed!"
     assert unpacked_stm == 0, "STM decoding failed!"
     print("SUCCESS: Packing and unpacking logic is 100% mathematically flawless! ✅")
+
+
+
+def mix_and_split_bins(input_bins, output_prefix, num_chunks=2):
+    """
+    Takes a list of .bin files, mixes them globally, and splits them 
+    into `num_chunks` equal-sized .bin chunks to fit inside RAM constraints.
+    """
+    bullet_dtype = np.dtype([
+        ('occupancy', np.uint64),
+        ('pieces', (np.uint8, 16)),
+        ('score', np.int16),
+        ('result', np.uint8),
+        ('stm', np.uint8),
+        ('pad1', np.uint16),
+        ('pad2', np.uint16)
+    ])
+    
+    # 1. Open temporary files for out-of-core distribution
+    temp_files = [open(f"{output_prefix}_temp_{i}.bin", 'wb') for i in range(num_chunks)]
+    
+    for in_file in input_bins:
+        print(f"Distributing records from {in_file}...")
+        # Open source file in read-only memmap
+        mmap_data = np.memmap(in_file, dtype=bullet_dtype, mode='r')
+        
+        # Read in 5 Million record blocks (~160MB at a time)
+        chunk_size = 5_000_000 
+        for offset in range(0, len(mmap_data), chunk_size):
+            block = mmap_data[offset:offset+chunk_size]
+            
+            # Generate random destination chunks for each record in the block
+            dests = np.random.randint(0, num_chunks, size=len(block))
+            
+            # Vectorized write to temp files
+            for i in range(num_chunks):
+                mask = (dests == i)
+                if np.any(mask):
+                    temp_files[i].write(block[mask].tobytes())
+                    
+    for f in temp_files:
+        f.close()
+        
+    print("\nDistribution done! Now performing perfect in-memory shuffles for each chunk...")
+    
+    # 2. Perfect shuffle each chunk individually
+    for i in range(num_chunks):
+        temp_name = f"{output_prefix}_temp_{i}.bin"
+        final_name = f"{output_prefix}_chunk_{i}.bin"
+        print(f"Shuffling and saving {final_name}...")
+        
+        # This will load exactly 1/num_chunks of the data into RAM
+        chunk_data = np.fromfile(temp_name, dtype=bullet_dtype)
+        np.random.shuffle(chunk_data)
+        chunk_data.tofile(final_name)
+        
+        # Clean up temp file
+        os.remove(temp_name)
+        
+    print("\nAll datasets mixed, shuffled, and split successfully!")
+
 
 if __name__ == "__main__":
     # Run the test immediately when you execute this script
