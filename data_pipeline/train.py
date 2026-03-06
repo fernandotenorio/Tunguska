@@ -1,7 +1,10 @@
 import os
+import gc
+import glob
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import math
@@ -121,18 +124,19 @@ def blended_loss(outputs, scores, results, blend_ratio=0.7):
 # 4. TRAINING LOOP WITH FULL CHECKPOINTING
 # ==============================================================================
 
-def train(bin_path, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resume_from=None):
+def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resume_from=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Starting Training on: {device}")
 
-    # Create checkpoints directory
     os.makedirs(checkpoint_folder, exist_ok=True)
-
-    dataset = PerspectiveNNUEDataset(bin_path)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=3)
 
     model = PerspectiveNNUE().to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # --- REFINED LR SCHEDULER ---
+    # CosineAnnealing smoothly decays the LR from initial `lr` down to `eta_min` over `epochs`.
+    # eta_min is the absolute minimum learning rate it will reach at the last epoch.
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
 
     start_epoch = 0
 
@@ -143,48 +147,89 @@ def train(bin_path, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resu
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch']
+        
+        # Load the scheduler state if it exists (for new checkpoints)
+        if 'scheduler_state_dict' in checkpoint:
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        else:
+            print("No scheduler state found in old checkpoint. Fast-forwarding scheduler...")
+            # If resuming from an older checkpoint that didn't have a scheduler, 
+            # we must manually step it to catch up to the current epoch.
+            for _ in range(start_epoch):
+                scheduler.step()
+                
         print(f"Successfully resumed from Epoch {start_epoch}")
     # ------------------------------------
 
     for epoch in range(start_epoch, epochs):
-        model.train()
-        total_loss = 0.0
+        # Get current learning rate to log it
+        current_lr = scheduler.get_last_lr()[0]
+        print(f"\n{'='*50}")
+        print(f"STARTING EPOCH {epoch+1}/{epochs} | CURRENT LR: {current_lr:.6f}")
+        print(f"{'='*50}\n")
         
-        for batch_idx, (w_feat, b_feat, stm, scores, results) in enumerate(dataloader):
-            w_feat = w_feat.to(device)
-            b_feat = b_feat.to(device)
-            stm = stm.to(device)
-            scores = scores.to(device)
-            results = results.to(device)
+        np.random.shuffle(chunk_paths) 
+        total_epoch_loss = 0.0
+        batches_in_epoch = 0
 
-            optimizer.zero_grad()
-            outputs = model(w_feat, b_feat, stm)
-            loss = blended_loss(outputs, scores, results, blend_ratio=0.7) 
+        for chunk_idx, chunk_path in enumerate(chunk_paths):
+            print(f"--- Epoch {epoch+1} | Loading Chunk {chunk_idx+1}/{len(chunk_paths)}: {os.path.basename(chunk_path)} ---")
             
-            loss.backward()
-            optimizer.step()
+            dataset = PerspectiveNNUEDataset(chunk_path)
+            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=3)
+            
+            model.train()
+            chunk_loss = 0.0
+            
+            for batch_idx, (w_feat, b_feat, stm, scores, results) in enumerate(dataloader):
+                w_feat, b_feat, stm = w_feat.to(device), b_feat.to(device), stm.to(device)
+                scores, results = scores.to(device), results.to(device)
 
-            total_loss += loss.item()
+                optimizer.zero_grad()
+                outputs = model(w_feat, b_feat, stm)
+                loss = blended_loss(outputs, scores, results, blend_ratio=0.7) 
+                
+                loss.backward()
+                optimizer.step()
 
-            if batch_idx % 100 == 0:
-                print(f"Epoch {epoch+1}/{epochs} | Batch {batch_idx}/{len(dataloader)} | Loss: {loss.item():.5f}")
+                chunk_loss += loss.item()
+                total_epoch_loss += loss.item()
+                batches_in_epoch += 1
 
-        avg_loss = total_loss / len(dataloader)
-        print(f"--- Epoch {epoch+1} Complete | Average Loss: {avg_loss:.5f} ---")
+                if batch_idx % 250 == 0:
+                    print(f"Epoch {epoch+1} | Chunk {chunk_idx+1} | Batch {batch_idx}/{len(dataloader)} | Loss: {loss.item():.5f}")
+            
+            print(f"--- Chunk {chunk_idx+1} Complete | Average Loss: {chunk_loss / len(dataloader):.5f} ---")
+            
+            # Memory Cleanup
+            del dataloader
+            del dataset
+            gc.collect() 
+            
+            # Sub-Epoch Checkpoint (now includes scheduler state)
+            ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}_chunk_{chunk_idx+1}.pt")
+            torch.save({
+                'epoch': epoch, 
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(), # <-- NEW
+            }, ckpt_path)
+            
+        avg_loss = total_epoch_loss / batches_in_epoch
+        print(f"\n======== Epoch {epoch+1} Complete | Total Avg Loss: {avg_loss:.5f} ========")
         
-        # --- FULL CHECKPOINT SAVING LOGIC ---
-        checkpoint = {
+        # Step the scheduler at the very end of the full epoch!
+        scheduler.step()
+        
+        # Full Epoch Checkpoint
+        full_ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}_COMPLETE.pt")
+        torch.save({
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(), # <-- NEW
             'loss': avg_loss,
-        }
-        
-        ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}.pt")
-        torch.save(checkpoint, ckpt_path)
-        print(f"Saved Full Checkpoint to {ckpt_path}\n")
-        # ------------------------------------
-
+        }, full_ckpt_path)
 
 
 def save_npz(checkpoint_path, outfile):
@@ -311,11 +356,10 @@ def gen_all_weights():
 # train(training_file, epochs=10, batch_size=8192, lr=1e-3, resume_from="checkpoints/nnue_epoch_5.pt")
 
 if __name__ == "__main__":
-    training_file = "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"
+    chunk_files = glob.glob("../data/train/mixed_train_chunk_*.bin")
     checkpoint_folder = "../checkpoints"
 
-    if os.path.exists(training_file):
-        # train(training_file, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3)
-        train(training_file, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3, resume_from="../checkpoints/nnue_epoch_2.pt")
+    if len(chunk_files) > 0:
+        train(chunk_files, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3)
     else:
-        print(f"File {training_file} not found.")
+        print(f"No chunks found! Ensure you ran the mix_and_split_bins tool.")
