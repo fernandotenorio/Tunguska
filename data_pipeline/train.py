@@ -11,7 +11,7 @@ from torch.utils.cpp_extension import load
 
 
 # ==============================================================================
-# 1. LOAD PRE-COMPILED C++ EXTENSION
+# LOAD PRE-COMPILED C++ EXTENSION
 # ==============================================================================
 try:
     # imports pre-compiled .pyd (Windows) or .so (Linux) file
@@ -25,12 +25,12 @@ except ImportError as e:
     raise e
 
 # ==============================================================================
-# 2. THE PERSPECTIVE NNUE ARCHITECTURE
+# THE PERSPECTIVE NNUE ARCHITECTURE
 # ==============================================================================
 class PerspectiveNNUE(nn.Module):
     def __init__(self):
         super(PerspectiveNNUE, self).__init__()
-        self.HL = 256
+        self.HL = 128
         self.ft = nn.Linear(768, self.HL)
         self.out = nn.Linear(2 * self.HL, 1)
 
@@ -57,7 +57,7 @@ class PerspectiveNNUE(nn.Module):
 
 
 # ==============================================================================
-# 3. BLENDED LOSS FUNCTION
+# BLENDED LOSS FUNCTION
 # ==============================================================================
 def blended_loss(outputs, scores, results, blend_ratio=0.7):
     score_wdl = torch.sigmoid(scores / 400.0)
@@ -66,11 +66,72 @@ def blended_loss(outputs, scores, results, blend_ratio=0.7):
     loss = nn.MSELoss()(net_wdl, target)
     return loss
 
+# ==============================================================================
+# VALIDATION LOGIC
+# ==============================================================================
+def run_validation(model, val_path, batch_size, device, blend_ratio=0.7):
+    """Evaluates the current model on the validation dataset."""
+    if not os.path.exists(val_path):
+        print(f"WARNING: Validation file '{val_path}' not found. Skipping validation.")
+        return 0.0, 0.0
+
+    model.eval() # Disable dropout, gradients, etc.
+    val_loader = FastNNUELoader(val_path)
+    
+    val_loss = 0.0
+    val_cp_mse = 0.0
+    total_val_positions = 0
+    val_batches = 0
+    
+    with torch.no_grad(): # Saves memory and accelerates computation
+        while not val_loader.is_eof():
+            w_indices, b_indices, stm, scores, results = val_loader.next_batch(batch_size)
+            if w_indices.size(0) == 0:
+                break
+                
+            w_indices = w_indices.to(device).long()
+            b_indices = b_indices.to(device).long()
+            stm, scores, results = stm.to(device), scores.to(device), results.to(device)
+
+            bsz = w_indices.size(0)
+            w_feat = torch.zeros(bsz, 769, device=device)
+            b_feat = torch.zeros(bsz, 769, device=device)
+            
+            w_feat.scatter_(1, w_indices, 1.0)
+            b_feat.scatter_(1, b_indices, 1.0)
+            w_feat, b_feat = w_feat[:, :768], b_feat[:, :768]
+
+            outputs = model(w_feat, b_feat, stm)
+            
+            # Compute Evaluation Loss
+            loss = blended_loss(outputs, scores, results, blend_ratio=blend_ratio)
+            val_loss += loss.item()
+            
+            # Compute Centipawn Error (Engine-intuitive metric)
+            net_cp = outputs * 400.0
+            cp_se = torch.sum((net_cp - scores) ** 2).item()
+            val_cp_mse += cp_se
+            
+            total_val_positions += bsz
+            val_batches += 1
+
+    avg_val_loss = val_loss / max(1, val_batches)
+    val_cp_rmse = math.sqrt(val_cp_mse / max(1, total_val_positions))
+    
+    print(f"Validation Validated {total_val_positions:,} positions.")
+    print(f"Validation Loss:     {avg_val_loss:.5f}")
+    print(f"Validation CP RMSE:  {val_cp_rmse:.2f} centipawns")
+    
+    del val_loader
+    gc.collect()
+    
+    return avg_val_loss, val_cp_rmse
+
 
 # ==============================================================================
-# 4. TRAINING LOOP
+# TRAINING LOOP WITH VALIDATION
 # ==============================================================================
-def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-4, resume_from=None):
+def train(chunk_paths, val_path, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-4, resume_from=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Starting Training on: {device}")
 
@@ -112,44 +173,32 @@ def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-4, r
         total_epoch_loss = 0.0
         batches_in_epoch = 0
 
+        # --- 4A. TRAINING PHASE ---
         for chunk_idx, chunk_path in enumerate(chunk_paths):
             print(f"--- Epoch {epoch+1} | Loading Chunk {chunk_idx+1}/{len(chunk_paths)}: {os.path.basename(chunk_path)} ---")
             
-            # Initialize C++ Fast Loader
             loader = FastNNUELoader(chunk_path)
-            model.train()
+            model.train() # Set to train mode
             chunk_loss = 0.0
             batch_idx = 0
             
-            # Note: We don't need shuffle=True here because our `mix_and_split_bins` 
-            # script already randomized the records on disk!
             while not loader.is_eof():
-                # 1. Fetch batch from C++
                 w_indices, b_indices, stm, scores, results = loader.next_batch(batch_size)
+                if w_indices.size(0) == 0:
+                    break
                 
-                # C++ returns CPU tensors; move to GPU
                 w_indices = w_indices.to(device).long()
                 b_indices = b_indices.to(device).long()
-                stm = stm.to(device)
-                scores = scores.to(device)
-                results = results.to(device)
+                stm, scores, results = stm.to(device), scores.to(device), results.to(device)
 
-                # 2. Convert sparse indices to dense [batch_size, 768] arrays directly on the GPU
                 bsz = w_indices.size(0)
-                
-                # We allocate 769 so index 768 (our empty padding value from C++) has somewhere to go
                 w_feat = torch.zeros(bsz, 769, device=device)
                 b_feat = torch.zeros(bsz, 769, device=device)
                 
-                # Instantly scatter 1.0s into the correct feature indices
                 w_feat.scatter_(1, w_indices, 1.0)
                 b_feat.scatter_(1, b_indices, 1.0)
-                
-                # Slice off the padding column so we pass exactly 768 to the model
-                w_feat = w_feat[:, :768]
-                b_feat = b_feat[:, :768]
+                w_feat, b_feat = w_feat[:, :768], b_feat[:, :768]
 
-                # 3. Standard Forward/Backward pass
                 optimizer.zero_grad()
                 outputs = model(w_feat, b_feat, stm)
                 loss = blended_loss(outputs, scores, results, blend_ratio=0.7) 
@@ -163,43 +212,50 @@ def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-4, r
                 batch_idx += 1
 
                 if batch_idx % 250 == 0:
-                    print(f"Epoch {epoch+1} | Chunk {chunk_idx+1} | Batch {batch_idx} | Loss: {loss.item():.5f}")
+                    print(f"Epoch {epoch+1} | Chunk {chunk_idx+1} | Batch {batch_idx} | Train Loss: {loss.item():.5f}")
             
-            # To avoid division by zero on tiny files
             if batch_idx > 0:
-                print(f"--- Chunk {chunk_idx+1} Complete | Average Loss: {chunk_loss / batch_idx:.5f} ---")
+                print(f"--- Chunk {chunk_idx+1} Complete | Average Train Loss: {chunk_loss / batch_idx:.5f} ---")
             
-            # Sub-Epoch Cleanup & Checkpoint
             del loader
             gc.collect() 
             
-            ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}_chunk_{chunk_idx+1}.pt")
-            torch.save({
-                'epoch': epoch, 
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-            }, ckpt_path)
-            
-        avg_loss = total_epoch_loss / max(1, batches_in_epoch)
-        print(f"\n======== Epoch {epoch+1} Complete | Total Avg Loss: {avg_loss:.5f} ========")
+            # Sub-Epoch Checkpoint
+            # ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}_chunk_{chunk_idx+1}.pt")
+            # torch.save({
+            #     'epoch': epoch, 
+            #     'model_state_dict': model.state_dict(),
+            #     'optimizer_state_dict': optimizer.state_dict(),
+            #     'scheduler_state_dict': scheduler.state_dict(),
+            # }, ckpt_path)
+
+        # --- 4B. VALIDATION PHASE ---
+        print(f"\n--- Running Validation for Epoch {epoch+1} ---")
+        avg_val_loss, val_cp_rmse = run_validation(model, val_path, batch_size, device, blend_ratio=0.7)
+
+        # --- 4C. EPOCH COMPLETION ---
+        avg_train_loss = total_epoch_loss / max(1, batches_in_epoch)
+        print(f"\n======== Epoch {epoch+1} Complete ========")
+        print(f"Train Loss: {avg_train_loss:.5f} | Val Loss: {avg_val_loss:.5f} | Val CP Error: {val_cp_rmse:.2f}")
+        print("========================================")
         
-        # Step the LR scheduler
         scheduler.step()
         
-        # Full Epoch Checkpoint
+        # Save Full Epoch Checkpoint with Validation Metrics Included
         full_ckpt_path = os.path.join(checkpoint_folder, f"nnue_epoch_{epoch+1}_COMPLETE.pt")
         torch.save({
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'loss': avg_loss,
+            'train_loss': avg_train_loss,
+            'val_loss': avg_val_loss,
+            'val_cp_rmse': val_cp_rmse
         }, full_ckpt_path)
 
 
 # ==============================================================================
-# 5. C++ ENGINE EXPORT LOGIC
+# C++ ENGINE EXPORT LOGIC
 # ==============================================================================
 def save_npz(checkpoint_path, outfile):
     print(f"Loading checkpoint {checkpoint_path}...")
@@ -217,81 +273,10 @@ def save_npz(checkpoint_path, outfile):
 
 
 def gen_all_weights():
-    nets = glob.glob("../checkpoints/*.pt")
+    nets = glob.glob("../checkpoints/*_COMPLETE.pt")
     for net in nets:
         epoch = net.split("_")[-2]
         save_npz(net, f"net_{epoch}")
-
-
-# ==============================================================================
-# 6. EVALUATION
-# ==============================================================================
-def evaluate_checkpoint(bin_path, checkpoint_path, batch_size=8192, blend_ratio=0.7):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"\nEvaluating Checkpoint: {checkpoint_path} on {device}")
-
-    loader = FastNNUELoader(bin_path)
-    model = PerspectiveNNUE().to(device)
-    
-    if not os.path.exists(checkpoint_path):
-        print(f"Error: Checkpoint {checkpoint_path} not found!")
-        return
-
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-
-    total_wdl_mse = 0.0
-    total_cp_mse = 0.0
-    total_positions = 0
-    batch_idx = 0
-
-    with torch.no_grad():
-        while not loader.is_eof():
-            w_indices, b_indices, stm, scores, results = loader.next_batch(batch_size)
-            
-            w_indices = w_indices.to(device).long()
-            b_indices = b_indices.to(device).long()
-            stm, scores, results = stm.to(device), scores.to(device), results.to(device)
-
-            bsz = w_indices.size(0)
-            w_feat = torch.zeros(bsz, 769, device=device)
-            b_feat = torch.zeros(bsz, 769, device=device)
-            
-            w_feat.scatter_(1, w_indices, 1.0)
-            b_feat.scatter_(1, b_indices, 1.0)
-            
-            w_feat, b_feat = w_feat[:, :768], b_feat[:, :768]
-
-            outputs = model(w_feat, b_feat, stm)
-
-            net_wdl = torch.sigmoid(outputs)
-            score_wdl = torch.sigmoid(scores / 400.0)
-            target_wdl = blend_ratio * score_wdl + (1.0 - blend_ratio) * results
-            
-            wdl_se = torch.sum((net_wdl - target_wdl) ** 2).item()
-            total_wdl_mse += wdl_se
-
-            net_cp = outputs * 400.0
-            cp_se = torch.sum((net_cp - scores) ** 2).item()
-            total_cp_mse += cp_se
-
-            total_positions += bsz
-            batch_idx += 1
-
-            if batch_idx % 100 == 0:
-                print(f"Evaluated {total_positions:,} positions...")
-
-    final_wdl_mse = total_wdl_mse / total_positions
-    final_cp_rmse = math.sqrt(total_cp_mse / total_positions)
-
-    print("\n" + "="*40)
-    print("EVALUATION RESULTS")
-    print("="*40)
-    print(f"Total Positions: {total_positions:,}")
-    print(f"WDL Target MSE:  {final_wdl_mse:.5f}")
-    print(f"Centipawn RMSE:  {final_cp_rmse:.2f} (cp margin of error)")
-    print("="*40 + "\n")
 
 
 if __name__ == "__main__":

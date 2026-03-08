@@ -1,7 +1,7 @@
 #pragma once
 
 #define INPUT_SIZE 768
-#define HL_SIZE 128
+#define HL_SIZE 256
 #define SCALE 400
 
 // Enums
