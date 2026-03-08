@@ -219,7 +219,7 @@ def save_npz(checkpoint_path, outfile):
 def gen_all_weights():
     nets = glob.glob("../checkpoints/*.pt")
     for net in nets:
-        epoch = net.split("_")[-1].replace(".pt", "")
+        epoch = net.split("_")[-2]
         save_npz(net, f"net_{epoch}")
 
 
