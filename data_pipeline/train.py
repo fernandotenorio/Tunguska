@@ -30,7 +30,7 @@ except ImportError as e:
 class PerspectiveNNUE(nn.Module):
     def __init__(self):
         super(PerspectiveNNUE, self).__init__()
-        self.HL = 128
+        self.HL = 256
         self.ft = nn.Linear(768, self.HL)
         self.out = nn.Linear(2 * self.HL, 1)
 
@@ -70,7 +70,7 @@ def blended_loss(outputs, scores, results, blend_ratio=0.7):
 # ==============================================================================
 # 4. TRAINING LOOP
 # ==============================================================================
-def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, resume_from=None):
+def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-4, resume_from=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Starting Training on: {device}")
 
@@ -80,7 +80,7 @@ def train(chunk_paths, checkpoint_folder, epochs=10, batch_size=8192, lr=1e-3, r
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Cosine Annealing Scheduler
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     start_epoch = 0
 
@@ -300,6 +300,6 @@ if __name__ == "__main__":
 
     if len(chunk_files) > 0:
         # Tweak batch size if desired. 16384 or 32768 run blazingly fast with the C++ loader.
-        train(chunk_files, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3)
+        train(chunk_files, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-4)
     else:
         print(f"No chunk files found!")

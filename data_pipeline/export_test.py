@@ -342,20 +342,23 @@ def mix_and_split_bins(input_bins, output_prefix, num_chunks=2):
 
 if __name__ == "__main__":
   
-    # binpacks = [
-    #     ("../data/binpacks/test80-2024-02-feb-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"),
-    #     ("../data/binpacks/test80-2024-03-mar-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-03-mar-2tb7p.min-v2.v6.bin"),
-    #     ("../data/binpacks/test80-2024-04-apr-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-04-apr-2tb7p.min-v2.v6.bin"),
-    #     ("../data/binpacks/test80-2024-05-may-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin")
-    # ]
+    binpacks = [
+        # ("../data/binpacks/test80-2024-02-feb-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-03-mar-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-03-mar-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-04-apr-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-04-apr-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-05-may-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-06-jun-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-06-jun-2tb7p.min-v2.v6.bin")
+    ]
     # for p, b in binpacks:
     #     convert_binpack_plain(p, b)
+
     mix_and_split_bins(
         [
             "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin",
             "../data/train/test80-2024-03-mar-2tb7p.min-v2.v6.bin",
             "../data/train/test80-2024-04-apr-2tb7p.min-v2.v6.bin",
-            "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin"
+            "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin",
+            "../data/train/test80-2024-06-jun-2tb7p.min-v2.v6.bin"
         ],
         "../data/train/mixed_train",
         4
