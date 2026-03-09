@@ -349,11 +349,11 @@ if __name__ == "__main__":
         # ("../data/binpacks/test80-2024-05-may-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin"),
         # ("../data/binpacks/test80-2024-06-jun-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-06-jun-2tb7p.min-v2.v6.bin"),
 
-        ("../data/binpacks/test80-2023-01-jan-16tb7p.v6-sk20.min.plain", "../data/train/test80-2023-01-jan-16tb7p.v6-sk20.min.bin"),
-        ("../data/binpacks/test80-2023-02-feb-16tb7p.v6-dd.min.plain", "../data/train/test80-2023-02-feb-16tb7p.v6-dd.min.bin"),
-        ("../data/binpacks/test80-2023-03-mar-2tb7p.min.plain", "../data/train/test80-2023-03-mar-2tb7p.min.bin"),
-        ("../data/binpacks/test80-2023-04-apr-2tb7p.v6-sk16.min.plain", "../data/train/test80-2023-04-apr-2tb7p.v6-sk16.min.bin"),
-        ("../data/binpacks/test80-2023-05-may-2tb7p.v6.min.plain", "../data/train/test80-2023-05-may-2tb7p.v6.min.bin"),
+        # ("../data/binpacks/test80-2023-01-jan-16tb7p.v6-sk20.min.plain", "../data/train/test80-2023-01-jan-16tb7p.v6-sk20.min.bin"),
+        # ("../data/binpacks/test80-2023-02-feb-16tb7p.v6-dd.min.plain", "../data/train/test80-2023-02-feb-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2023-03-mar-2tb7p.min.plain", "../data/train/test80-2023-03-mar-2tb7p.min.bin"),
+        # ("../data/binpacks/test80-2023-04-apr-2tb7p.v6-sk16.min.plain", "../data/train/test80-2023-04-apr-2tb7p.v6-sk16.min.bin"),
+        # ("../data/binpacks/test80-2023-05-may-2tb7p.v6.min.plain", "../data/train/test80-2023-05-may-2tb7p.v6.min.bin"),
     ]
     for p, b in binpacks:
         convert_binpack_plain(p, b)
@@ -368,8 +368,8 @@ if __name__ == "__main__":
 
             "../data/train/test80-2023-01-jan-16tb7p.v6-sk20.min.bin",
             "../data/train/test80-2023-02-feb-16tb7p.v6-dd.min.bin",
-            "../data/train/train/test80-2023-03-mar-2tb7p.min.bin",
-            "../data/train/train/test80-2023-04-apr-2tb7p.v6-sk16.min.bin",
+            "../data/train/test80-2023-03-mar-2tb7p.min.bin",
+            "../data/train/test80-2023-04-apr-2tb7p.v6-sk16.min.bin",
             "../data/train/test80-2023-05-may-2tb7p.v6.min.bin",
         ],
         "../data/train/mixed_train",
