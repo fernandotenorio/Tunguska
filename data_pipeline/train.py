@@ -131,7 +131,7 @@ def run_validation(model, val_path, batch_size, device, blend_ratio=0.7):
 # ==============================================================================
 # TRAINING LOOP WITH VALIDATION
 # ==============================================================================
-def train(chunk_paths, val_path, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-4, resume_from=None):
+def train(chunk_paths, val_path, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3, resume_from=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Starting Training on: {device}")
 
@@ -141,7 +141,7 @@ def train(chunk_paths, val_path, checkpoint_folder, epochs=10, batch_size=16384,
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Cosine Annealing Scheduler
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
 
     start_epoch = 0
 
@@ -287,6 +287,6 @@ if __name__ == "__main__":
 
     if len(chunk_files) > 0:
         # Tweak batch size if desired. 16384 or 32768 run blazingly fast with the C++ loader.
-        train(train_files, val_file, checkpoint_folder, epochs=20, batch_size=16384, lr=1e-4)
+        train(train_files, val_file, checkpoint_folder, epochs=10, batch_size=16384, lr=1e-3)
     else:
         print(f"No chunk files found!")
