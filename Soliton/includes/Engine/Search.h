@@ -29,6 +29,8 @@ public:
     // MVV
     static int MVV_LVA[14][14];
 
+    static int LMRTable[65][257];
+
     static void historyStats(Board& board);
     static void init_search();
 

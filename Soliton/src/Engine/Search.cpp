@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cmath>
 #include "FeatureExtractor.h"
 
 Search::SearchParams Search::params;
@@ -29,6 +30,7 @@ void Search::checkTime() {
 
 // MVV-LVA table
 int Search::MVV_LVA[14][14];
+int Search::LMRTable[65][257];
 
 // NNUE
 NNUENetwork Search::nnue_net;
@@ -43,6 +45,17 @@ void Search::init_search() {
     for (int v = 2; v < 14; v++) {
         for (int a = 2; a < 14; a++) {
             MVV_LVA[v][a] = values[v] + 10 - (values[a] / 100);
+        }
+    }
+
+    for (int d = 0; d < 65; d++) {
+        for (int m = 0; m < 257; m++) {
+            if (d > 0 && m > 0) {
+                // Standard Stockfish-like logarithmic formula
+                LMRTable[d][m] = static_cast<int>(0.75 + std::log(d) * std::log(m) / 2.25);
+            } else {
+                LMRTable[d][m] = 0;
+            }
         }
     }
 
@@ -192,23 +205,24 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
-    // Check time every 2048 nodes to avoid overhead of system clock calls
+    // 1. Periodic Resource Check
     if ((params.nodes & 2047) == 0) checkTime();
     if (params.stopped) return 0;
 
+    // 2. Draw Detection
     if ((board.state.halfMoves >= 100 || board.isRepetition()) && board.ply > 0){
         return 0;
     }
 
-    // Safety check for search depth to prevent stack overflow in extreme tactical scenarios
+    // 3. Max Depth Safety
     if (board.ply >= Board::MAX_DEPTH - 1) {
-        //return Evaluation::evaluate(board);
         return nnue_state.evaluate(board.state.currentPlayer == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
     }
 
     params.nodes++;
     if (depth <= 0) return quiescence(board, alpha, beta);
 
+    // 4. Hash Table Probe
     int pvMove = Move::NO_MOVE;
     int hashScore = 0;
     if (HashTable::probeHashEntry(board, &pvMove, &hashScore, alpha, beta, depth)) {
@@ -216,30 +230,25 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     }
 
     int side = board.state.currentPlayer;
-    // Determine if we are currently in check (Evasion)
     bool inCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], side ^ 1);
 
-    // Static Eval for Futility Pruning
+    // 5. Static Eval & Futility Pruning
     int staticEval = 0;
     bool futility_prune = false;
     
     if (!inCheck) {
-        // We calculate staticEval once if we are at low depths (RFP goes up to depth 5)
         if (depth <= 5) {
-            //staticEval = Evaluation::evaluate(board);
             staticEval = nnue_state.evaluate(side == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
             
-            // 1. Reverse Futility Pruning (Static Null Move Pruning)
-            // If we are not in a mate sequence, and the position is so good that 
-            // even after subtracting a safety margin we still beat beta, we prune!
+            // Reverse Futility Pruning (Static Null Move Pruning)
             if (abs(beta) < MATE - 100) {
                 int rfp_margin = 120 * depth; 
                 if (staticEval - rfp_margin >= beta) {
-                    return staticEval - rfp_margin; // Cause a Beta cutoff immediately
+                    return staticEval - rfp_margin; 
                 }
             }
             
-            // 2. Standard Futility Pruning setup
+            // Standard Futility Pruning setup
             if (depth <= 3 && abs(alpha) < MATE - 100) {
                 if (staticEval + FUTIL_MARGIN[depth] <= alpha) {
                     futility_prune = true;
@@ -248,7 +257,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         }
     }
 
-    // Null Move Pruning
+    // 6. Null Move Pruning
     bool hasBigPiece = (board.bitboards[Board::KNIGHT | side] |
                         board.bitboards[Board::BISHOP | side] |
                         board.bitboards[Board::ROOK   | side] |
@@ -263,6 +272,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         if (score >= beta) return beta;
     }
 
+    // 7. Move Generation & Sorting
     MoveList moves;
     MoveGen::pseudoLegalMoves(&board, side, moves, inCheck);
     sortMoves(moves, board, pvMove, board.ply);
@@ -273,10 +283,9 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     int bestScore = -INFINITE;
     int bestMove = Move::NO_MOVE;
 
-    // If we are in check, we extend the search by 1 ply to resolve the threat.
-    int extension = 0;
-    if (inCheck) extension = 1;
+    int extension = inCheck ? 1 : 0;
 
+    // 8. Move Loop
     for (int i = 0; i < moves.size(); i++) {
         int move = moves.get(i);
 
@@ -290,66 +299,68 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         }
 
         legalMovesCount++;
-        //int oppKingSQ = board.kingSQ[board.state.currentPlayer];
-        //bool giveCheck = MoveGen::isSquareAttacked(&board, oppKingSQ, board.state.currentPlayer^1);
+        int captured = Move::captured(move);
+        int promoted = Move::promoteTo(move);
+        bool isQuiet = (captured == Board::EMPTY && promoted == Board::EMPTY);
 
-        // Futility prune quiet moves at low depth if static eval + margin is still below alpha
-        if (legalMovesCount > 1 && futility_prune &&
+        // Futility prune quiet moves at low depth
+        if (legalMovesCount > 1 && futility_prune && isQuiet &&
             move != pvMove &&
             move != board.searchKillers[0][board.ply] && 
             move != board.searchKillers[1][board.ply]) {
             
-            int captured = Move::captured(move);
-            int promoted = Move::promoteTo(move);
-            
-            if (captured == Board::EMPTY && promoted == Board::EMPTY) {
-                nnue_state.updateUndo(changes);
-                board.undoMove(move, undo);
-                continue;
-            }
+            nnue_state.updateUndo(changes);
+            board.undoMove(move, undo);
+            continue;
         }
 
-        // LATE MOVE REDUCTION (LMR)
-        int reduction = 0;
-        
-        // Conditions for reduction:
-        // 1. Depth is substantial (> 2)
-        // 2. We have searched the best moves already (legalMovesCount > 3)
-        // 3. We are NOT in check (do not reduce evasions)
-        if (depth > 3 && legalMovesCount > 3 && !inCheck) {
-            
-            int captured = Move::captured(move);
-            int promoted = Move::promoteTo(move);
+        // --- PVS & LMR LOGIC START ---
+        int currentDepth = depth - 1 + extension;
 
-            // 4. Move is quiet (no capture, no promotion)
-            if (captured == Board::EMPTY && promoted == Board::EMPTY) {
+        if (legalMovesCount == 1) {
+            // First Move (PV Move) gets a Full Window, Full Depth Search
+            score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+        } else {
+            int reduction = 0;
+
+            // Calculate Table-based Late Move Reduction
+            if (depth >= 3 && legalMovesCount > 3 && isQuiet && !inCheck) {
+                bool isKiller = (move == board.searchKillers[0][board.ply] || 
+                                 move == board.searchKillers[1][board.ply]);
                 
-                // 5. Move is not a Killer move
-                if (move != board.searchKillers[0][board.ply] && 
-                    move != board.searchKillers[1][board.ply]) {
-                    
-                    reduction = 1;
-                    // Reduce more for very late moves at high depth
-                    if (legalMovesCount > 6) reduction = 2;
-                    
-                    // Safety clamp
-                    if (reduction >= depth - 1) reduction = depth - 2;
+                // Fetch base reduction from our pre-calculated log table
+                int lmrDepth = std::min(depth, 64);
+                int lmrMoves = std::min(legalMovesCount, 256);
+                reduction = Search::LMRTable[lmrDepth][lmrMoves];
+
+                // Engine-specific LMR adjustments
+                if (isKiller) reduction--; 
+                if (beta - alpha > 1) reduction--; // Reduce less in PV nodes
+
+                // Clamp reduction to safe bounds
+                reduction = std::max(0, reduction);
+                if (reduction >= currentDepth) reduction = currentDepth - 1; // Don't drop into Quiescence
+                reduction = std::max(0, reduction);
+            }
+
+            // PVS Step 1: Null-Window Search (to prove the move is worse than alpha)
+            score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth - reduction, true);
+
+            // PVS Step 2: Re-search if the move unexpectedly beat alpha
+            if (score > alpha) {
+                // If the move was reduced, we must re-verify it at full depth (still Null-Window)
+                if (reduction > 0) {
+                    score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth, true);
+                }
+
+                // If it STILL beats alpha, AND is less than beta, it's a new Best Move! 
+                // We must re-search with the Full Window to get its exact evaluation.
+                if (score > alpha && score < beta) {
+                    score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
                 }
             }
         }
-
-        // Calculate final depth for this move
-        int currentDepth = depth - 1 + extension - reduction;
-
-        score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
-
-        // Re-Search Logic:
-        // If we reduced the depth, and the move beat alpha (it was better than we thought),
-        // we must search it again at full depth to get the accurate score.
-        if (reduction > 0 && score > alpha) {
-            currentDepth = depth - 1 + extension; // Full depth (with extension, no reduction)
-            score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
-        }
+        // --- PVS & LMR LOGIC END ---
 
         nnue_state.updateUndo(changes);
         board.undoMove(move, undo);
@@ -362,11 +373,11 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
             if (score > alpha) {
                 if (score >= beta) {
-                    if (Move::captured(move) == Board::EMPTY) {
+                    // Update Killers and History on Beta Cutoff
+                    if (isQuiet) {
                         board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
                         board.searchKillers[0][board.ply] = move;
 
-                        // History heuristic
                         int piece = board.board[Move::from(move)];
                         board.searchHistory[piece][Move::to(move)] += depth * depth;
                     }
@@ -378,10 +389,12 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         }
     } // moves loop
 
+    // 9. Checkmate / Stalemate detection
     if (legalMovesCount == 0) {
         return inCheck ? (-MATE + board.ply) : 0;
     }
 
+    // 10. Hash Table Store
     if (alpha > oldAlpha){
 		HashTable::storeHashEntry(board, bestMove, bestScore, HFEXACT, depth);
 	} else{		
