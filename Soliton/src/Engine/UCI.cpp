@@ -7,8 +7,8 @@
 #include <iostream>
 #include <sstream>
 
-std::thread UCI::searchThread;
-int num_threads = 2;
+std::vector<std::thread> UCI::workers;
+int num_threads = 4;
 
 void UCI::loop() {
     Evaluation::initAll();
@@ -28,11 +28,12 @@ void UCI::loop() {
         }
         else if (line == "ucinewgame") {
             // Ensure search is stopped before resetting
-            if(searchThread.joinable()) {
-                Search::stop();
-                searchThread.join();
+            Search::stop();
+            for (auto& t : workers) {
+                if (t.joinable())
+                    t.join();
             }
-            
+                        
             // 1. Clear the Transposition Table
             if (board.hashTable) {
                 board.hashTable->reset();
@@ -49,9 +50,10 @@ void UCI::loop() {
             parseGo(line, board);
         }
         else if (line == "stop") {
-            if (searchThread.joinable()) {
-                Search::stop();
-                searchThread.join();
+            Search::stop();
+            for (auto& t : workers) {
+                if (t.joinable())
+                    t.join();
             }
         }
         else if (line.find("evaltest") == 0) {
@@ -79,10 +81,10 @@ void UCI::loop() {
             TestSuite::runFile("bench.epd", 50);
         }
         else if (line == "quit") {
-            // Ensure search is stopped before quitting
-            if (searchThread.joinable()) {
-                Search::stop();
-                searchThread.join();
+            Search::stop();
+            for (auto& t : workers) {
+                if (t.joinable())
+                    t.join();
             }
             break;
         }
@@ -143,34 +145,26 @@ void UCI::parseGo(std::string line, Board& board) {
         else if (token == "movetime") ss >> movetime;
     }
 
-    if (searchThread.joinable()) {
-        searchThread.join();
+     // --- stop previous search ---
+    Search::stop();
+    for (auto& t : workers) {
+        if (t.joinable())
+            t.join();
     }
 
-     // Reset global shared states before launching workers
+    workers.clear();
+
+    // Reset global shared states before launching workers
     Search::stopped = false;
     Search::startTime = Search::currentTimeMillis();
     Search::timeLimit = movetime;
     Search::totalNodes = 0;
 
-    // Capture board by VALUE. This is crucial! 
-    // It creates a safe master copy of the board for this search block.
-    searchThread = std::thread([board, depth, movetime]() {
-        
-        std::vector<std::thread> workers;
-
-        for (int i = 0; i < num_threads; ++i) {
-            // board is captured by VALUE here again, meaning EACH thread gets its own isolated Board object!
-            workers.push_back(std::thread([board, depth, movetime, i]() mutable {
-                Search searcher(i);
-                bool isMain = (i == 0);
-                searcher.iterativeDeepening(board, depth, movetime, isMain);
-            }));
-        }
-
-        // Wait for all workers to finish
-        for (auto& t : workers) {
-            if (t.joinable()) t.join();
-        }
-    });
+    for (int i = 0; i < num_threads; ++i) {
+        workers.emplace_back([board, depth, movetime, i]() mutable {
+            Search searcher(i);
+            bool isMain = (i == 0);
+            searcher.iterativeDeepening(board, depth, movetime, isMain);
+        });
+    }
 }

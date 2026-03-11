@@ -3,7 +3,9 @@
 #include <assert.h>
 #include "Engine/MoveGen.h"
 #include <iostream>
+#include <mutex>
 
+static std::mutex ttMutex;
 
 void HashTable::initHash(int size){
 	numEntries = (size * 0x100000)/sizeof(HashEntry);
@@ -50,6 +52,7 @@ int HashTable::probePvMove(Board& board){
 }
 
 bool HashTable::probeHashEntry(Board& board, int *move, int *score, int alpha, int beta, int depth) {
+	std::lock_guard<std::mutex> lock(ttMutex);
 	int index = (int)(board.zKey & board.hashTable->numEntries_1);
 
 	if(board.hashTable->table[index].zKey == board.zKey) {
@@ -91,6 +94,8 @@ bool HashTable::probeHashEntry(Board& board, int *move, int *score, int alpha, i
 }
 
 void HashTable::storeHashEntry(Board& board, const int move, int score, const int flags, const int depth){
+	std::lock_guard<std::mutex> lock(ttMutex);
+
 	if (depth >= Board::MAX_DEPTH)
 		return;
 
@@ -122,6 +127,7 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
 }
 
 int HashTable::getPVLine(int depth, Board& board){
+	std::lock_guard<std::mutex> lock(ttMutex);
 	BoardState undoList[Board::MAX_DEPTH];
 	int move = HashTable::probePvMove(board);
 	int count = 0;

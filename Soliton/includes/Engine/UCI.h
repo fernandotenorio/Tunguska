@@ -13,7 +13,7 @@ public:
 private:
     static void parsePosition(std::string line, Board& board, HashTable* tt);
     static void parseGo(std::string line, Board& board);
-    static std::thread searchThread;
+    static std::vector<std::thread> workers;
 };
 
 #endif

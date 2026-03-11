@@ -134,8 +134,10 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
         }
     }
 
-    if (isMainThread)
+    if (isMainThread){
+        Search::stop();
         std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
+    }
         
     return bestMove;
 }
@@ -204,7 +206,7 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
     // 1. Periodic Resource Check
-    if ((localNodes & 2047) == 0) checkTime();
+    if ((localNodes & 1023) == 0) checkTime();
     if (stopped) return 0;
 
     // 2. Draw Detection
@@ -474,7 +476,7 @@ int Search::quiescence(Board& board, int alpha, int beta) {
     assert(alpha < beta);
 
     // 1. Periodic Resource Check
-    if ((localNodes & 2047) == 0) checkTime();
+    if ((localNodes & 1023) == 0) checkTime();
     if (stopped) return 0;
 
     localNodes++;
