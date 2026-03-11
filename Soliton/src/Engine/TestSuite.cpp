@@ -53,7 +53,8 @@ void TestSuite::runFile(std::string fl, int movetime) {
 		board.setHashTable(&hashTable);
 		hashTable.reset();
 
-		int mv = Search::iterativeDeepening(board, Board::MAX_DEPTH, movetime, false);
+		Search searcher(0);
+		int mv = searcher.iterativeDeepening(board, Board::MAX_DEPTH, movetime, true);
 		std::string moveFound = Move::toLongNotation(mv);
 		
 		if (moveFound == move) {

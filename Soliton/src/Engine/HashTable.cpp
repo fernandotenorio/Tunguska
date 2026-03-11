@@ -4,8 +4,6 @@
 #include "Engine/MoveGen.h"
 #include <iostream>
 
-BoardState HashTable::undoList[Board::MAX_DEPTH];
-
 
 void HashTable::initHash(int size){
 	numEntries = (size * 0x100000)/sizeof(HashEntry);
@@ -116,13 +114,15 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
     	score -= board.ply;
 	
 	board.hashTable->table[index].move = move;
-    board.hashTable->table[index].zKey = board.zKey;
-	board.hashTable->table[index].flags = flags;
 	board.hashTable->table[index].score = score;
 	board.hashTable->table[index].depth = depth;
+	board.hashTable->table[index].flags = flags;
+	std::atomic_thread_fence(std::memory_order_release);
+    board.hashTable->table[index].zKey = board.zKey;
 }
 
 int HashTable::getPVLine(int depth, Board& board){
+	BoardState undoList[Board::MAX_DEPTH];
 	int move = HashTable::probePvMove(board);
 	int count = 0;
 

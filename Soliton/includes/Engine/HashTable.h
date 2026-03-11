@@ -33,7 +33,6 @@ class HashTable{
 		void reset();
 
 		HashEntry *table;
-		static BoardState undoList[];
 		//rounded down to power of 2
 		U32 numEntries;
 		U32 numEntries_1;

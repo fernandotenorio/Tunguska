@@ -7,7 +7,8 @@
 #include <iostream>
 #include <sstream>
 
-std::thread UCI::searchThread; 
+std::thread UCI::searchThread;
+int num_threads = 2;
 
 void UCI::loop() {
     Evaluation::initAll();
@@ -131,43 +132,45 @@ void UCI::parsePosition(std::string line, Board& board, HashTable* tt) {
 }
 
 void UCI::parseGo(std::string line, Board& board) {
-    int depth = Board::MAX_DEPTH; // Default to maximum depth
-    long long movetime = -1;      // Default to no time limit
+    int depth = Board::MAX_DEPTH; 
+    long long movetime = -1;      
 
     std::stringstream ss(line);
     std::string token;
 
     while (ss >> token) {
-        if (token == "depth") {
-            ss >> depth;
-        }
-        else if (token == "movetime") {
-            ss >> movetime;
-        }
-        /* TODO
-        else if (token == "wtime") {
-            // Basic time management placeholder
-            long long wtime;
-            ss >> wtime;
-            if(board.state.currentPlayer == Board::WHITE) movetime = wtime / 30;
-        }
-        else if (token == "btime") {
-             // Basic time management placeholder
-             long long btime;
-             ss >> btime;
-             if(board.state.currentPlayer == Board::BLACK) movetime = btime / 30;
-        }
-        */
+        if (token == "depth") ss >> depth;
+        else if (token == "movetime") ss >> movetime;
     }
 
-    // Ensure any previous search is finished
     if (searchThread.joinable()) {
         searchThread.join();
     }
 
-    // [board, depth, movetime] captures these variables by VALUE.
-    // 'mutable' is required because iterativeDeepening modifies its local copy of the board.
-    searchThread = std::thread([board, depth, movetime]() mutable {
-        Search::iterativeDeepening(board, depth, movetime, true);
+     // Reset global shared states before launching workers
+    Search::stopped = false;
+    Search::startTime = Search::currentTimeMillis();
+    Search::timeLimit = movetime;
+    Search::totalNodes = 0;
+
+    // Capture board by VALUE. This is crucial! 
+    // It creates a safe master copy of the board for this search block.
+    searchThread = std::thread([board, depth, movetime]() {
+        
+        std::vector<std::thread> workers;
+
+        for (int i = 0; i < num_threads; ++i) {
+            // board is captured by VALUE here again, meaning EACH thread gets its own isolated Board object!
+            workers.push_back(std::thread([board, depth, movetime, i]() mutable {
+                Search searcher(i);
+                bool isMain = (i == 0);
+                searcher.iterativeDeepening(board, depth, movetime, isMain);
+            }));
+        }
+
+        // Wait for all workers to finish
+        for (auto& t : workers) {
+            if (t.joinable()) t.join();
+        }
     });
 }

@@ -42,7 +42,8 @@ void EvalFEN::eval(std::string inputPath, std::string outputPath, int depth) {
         // Run Search
         // Use a large timeout (e.g., 5000ms) to ensure depth is reached, 
         // or remove time check inside getScore entirely.
-        int score = Search::iterativeDeepeningScore(board, depth, 5000, false);
+        Search searcher(0);
+        int score = searcher.iterativeDeepeningScore(board, depth, 5000, true);
 
         // Filter invalid searches
         if (score == Search::INVALID_SCORE) {

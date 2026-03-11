@@ -8,33 +8,33 @@
 #include <cmath>
 #include "FeatureExtractor.h"
 
-Search::SearchParams Search::params;
+std::atomic<bool> Search::stopped{false};
+long long Search::timeLimit = -1;
+long long Search::startTime = 0;
+std::atomic<long> Search::totalNodes{0};
 
 void Search::stop() {
-    params.stopped = true;
+    stopped = true;
 }
 
 // Helper to get current time in milliseconds
-long long currentTimeMillis() {
+long long Search::currentTimeMillis() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 void Search::checkTime() {
-    if (params.timeLimit != -1) {
-        if (currentTimeMillis() - params.startTime >= params.timeLimit) {
-            params.stopped = true;
+    if (timeLimit != -1) {
+        if (currentTimeMillis() - startTime >= timeLimit) {
+            stopped = true;
         }
     }
 }
 
-// MVV-LVA table
+// NNUE and tables
+NNUENetwork Search::nnue_net;
 int Search::MVV_LVA[14][14];
 int Search::LMRTable[65][257];
-
-// NNUE
-NNUENetwork Search::nnue_net;
-NNUEState Search::nnue_state;
 
 void Search::init_search() {
     int values[] = { 0, 0, 
@@ -86,86 +86,84 @@ void Search::historyStats(Board& board){
           << " nonzero=" << countHist << std::endl;
 }
 
-int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose) {
+int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool isMainThread) {
     nnue_state.init(board);
 
-    params.nodes = 0;
-    params.stopped = false;
-    params.bestMove = Move::NO_MOVE;
-    params.startTime = currentTimeMillis();
-    params.timeLimit = moveTime;
-    params.depthLimit = maxDepth;
-
-    int alpha = -INFINITE;
-    int beta = INFINITE;
+    localNodes = 0;
+    int bestMove = Move::NO_MOVE;
     int score = 0;
 
-    for (int d = 1; d <= params.depthLimit; d++) {
-        board.ply = 0;  // not necessary, defensive. Every iterativeDeepening call starts with a fresh board
+    // Use maxDepth directly here too
+    for (int d = 1; d <= maxDepth; d++) {
+        board.ply = 0;
         score = aspirationWindow(board, d, score);
 
-        // If search was stopped during this depth, don't use the results
-        if (params.stopped) break;
+        // Use static stopped flag
+        if (Search::stopped) break;
 
         int pvCount = HashTable::getPVLine(d, board);
 
-        if (verbose) {
-            std::cout << "info depth " << d << " score cp " << score << " nodes " << params.nodes
-                << " time " << (currentTimeMillis() - params.startTime) << " pv ";
+        // ONLY print to the console if this is the main thread!
+        if (isMainThread) {
+            std::cout << "info depth " << d << " score cp " << score << " nodes " << Search::totalNodes
+                << " time " << (currentTimeMillis() - Search::startTime) << " pv ";
 
             for (int i = 0; i < pvCount; i++) {
                 std::cout << Move::toLongNotation(board.pvArray[i]) << " ";
             }
             std::cout << std::endl;
         }
-        params.bestMove = board.pvArray[0];
+        
+        bestMove = board.pvArray[0];
         if (score > MATE || score < -MATE) break;
     }
 
-    // Final output: ensure we output a bestmove even if search was stopped
-    if (params.bestMove == Move::NO_MOVE) {
-        // Fallback: just get any legal move if something went wrong
+    Search::totalNodes += localNodes;
+
+    if (bestMove == Move::NO_MOVE) {
         MoveList moves;
         MoveGen::pseudoLegalMoves(&board, board.state.currentPlayer, moves, false);
+
         for (int i = 0; i < moves.size(); i++) {
             BoardState undo = board.makeMove(moves.get(i));
             if (undo.valid) {
-                params.bestMove = moves.get(i);
+                bestMove = moves.get(i);
                 board.undoMove(moves.get(i), undo);
                 break;
             }
         }
     }
 
-    if (verbose)
-        std::cout << "bestmove " << Move::toLongNotation(params.bestMove) << std::endl;
-    return params.bestMove;
+    if (isMainThread)
+        std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
+        
+    return bestMove;
 }
 
-int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool verbose) {
+int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool isMainThread) {
     nnue_state.init(board);
 
-    params.nodes = 0;
-    params.stopped = false;
-    params.bestMove = Move::NO_MOVE;
-    params.startTime = currentTimeMillis();
-    params.timeLimit = moveTime;
-    params.depthLimit = maxDepth;
-
-    int alpha = -INFINITE;
-    int beta = INFINITE;
+    // 1. Thread-local nodes reset
+    localNodes = 0; 
+    
+    // 2. Thread-local best move
+    int bestMove = Move::NO_MOVE; 
     int finalScore = INVALID_SCORE;
     int score = 0;
 
-    for (int d = 1; d <= params.depthLimit; d++) {
+    for (int d = 1; d <= maxDepth; d++) { 
         board.ply = 0;
         score = aspirationWindow(board, d, score);
 
-        if (params.stopped) break;
+        // 5. Use the static stopped flag
+        if (Search::stopped) break; 
         finalScore = score;
 
         if (score > MATE || score < -MATE) break;
     }
+    
+    // Add this thread's nodes to the global counter
+    Search::totalNodes += localNodes;
     return finalScore;
 }
 
@@ -182,7 +180,7 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
         int score = alphaBeta(board, alpha, beta, depth, true);
 
-        if (params.stopped)
+        if (stopped)
             return score;
 
         if (score <= alpha) {
@@ -206,8 +204,8 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
     // 1. Periodic Resource Check
-    if ((params.nodes & 2047) == 0) checkTime();
-    if (params.stopped) return 0;
+    if ((localNodes & 2047) == 0) checkTime();
+    if (stopped) return 0;
 
     // 2. Draw Detection
     if ((board.state.halfMoves >= 100 || board.isRepetition()) && board.ply > 0){
@@ -219,7 +217,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         return nnue_state.evaluate(board.state.currentPlayer == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
     }
 
-    params.nodes++;
+    localNodes++;
     if (depth <= 0) return quiescence(board, alpha, beta);
 
     // 4. Hash Table Probe
@@ -268,7 +266,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         BoardState undo = board.makeNullMove();
         int score = -alphaBeta(board, -beta, -beta + 1, depth - R - 1, false);
         board.undoNullMove(undo);
-        if (params.stopped) return 0;
+        if (stopped) return 0;
         if (score >= beta) return beta;
     }
 
@@ -365,7 +363,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         nnue_state.updateUndo(changes);
         board.undoMove(move, undo);
 
-        if (params.stopped) return 0;
+        if (stopped) return 0;
 
         if (score > bestScore){
             bestScore = score;
@@ -476,10 +474,10 @@ int Search::quiescence(Board& board, int alpha, int beta) {
     assert(alpha < beta);
 
     // 1. Periodic Resource Check
-    if ((params.nodes & 2047) == 0) checkTime();
-    if (params.stopped) return 0;
+    if ((localNodes & 2047) == 0) checkTime();
+    if (stopped) return 0;
 
-    params.nodes++;
+    localNodes++;
 
     // 2. Check for Repetition / 50-move rule
     // Essential now that we allow non-capture evasions (perpetual check detection)
@@ -570,7 +568,7 @@ int Search::quiescence(Board& board, int alpha, int beta) {
         nnue_state.updateUndo(changes);
         board.undoMove(move, undo);
 
-        if (params.stopped) return 0;
+        if (stopped) return 0;
 
         if (score >= beta) return beta;
         if (score > alpha) alpha = score;

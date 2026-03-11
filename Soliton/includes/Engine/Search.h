@@ -13,45 +13,43 @@ public:
     static const int MATE = 29000;
     static const int INVALID_SCORE = -999999;
 
-    struct SearchParams {
-        long nodes;
-        int bestMove;
-        int depthLimit;
-        long long timeLimit; // in milliseconds
-        long long startTime;
-        std::atomic<bool> stopped;
-    };
+    // Shared global controls
+    static std::atomic<bool> stopped;
+    static long long timeLimit;
+    static long long startTime;
+    static std::atomic<long> totalNodes; // To accumulate nodes from all threads
 
-    // NNUE
+    // Read-only shared tables
     static NNUENetwork nnue_net;
-    static NNUEState nnue_state;
-
-    // MVV
     static int MVV_LVA[14][14];
-
     static int LMRTable[65][257];
 
-    static void historyStats(Board& board);
     static void init_search();
-
-    // Updated entry point
-    static int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool verbose);
-    //For eval FEN tool
-    static int iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool verbose);
-    static int aspirationWindow(Board& board, int depth, int score);
     static void stop();
+    static long long currentTimeMillis();
+
+    // --- INSTANCE VARIABLES (Per-Thread) ---
+    int threadId;
+    long localNodes;
+    NNUEState nnue_state;
+
+    Search(int id) : threadId(id), localNodes(0) {}
+
+    // --- NON-STATIC METHODS ---
+    void historyStats(Board& board);
+    int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool isMainThread);
+    int iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool isMainThread);
+    int aspirationWindow(Board& board, int depth, int score);
 
 private:
-    static int alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull);
-    static int quiescence(Board& board, int alpha, int beta);
-    static int see(const Board* board, int toSq, int target, int fromSq, int aPiece);
-    static bool isBadCapture(const Board& board, int move, int side);
-    static void checkTime(); // Checks if we should stop the search
+    int alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull);
+    int quiescence(Board& board, int alpha, int beta);
+    int see(const Board* board, int toSq, int target, int fromSq, int aPiece);
+    bool isBadCapture(const Board& board, int move, int side);
+    void checkTime();
 
-    static int scoreMove(const Board& board, int move, int pvMove);
-    static void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply);
-
-    static SearchParams params;
+    int scoreMove(const Board& board, int move, int pvMove);
+    void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply);
 };
 
 #endif
