@@ -4,7 +4,7 @@
 #include "Board.h"
 #include "defs.h"
 #include "Engine/Search.h"
-#define ISMATE (Search::INFINITE - Board::MAX_DEPTH)
+#define ISMATE (Search::MATE - Board::MAX_DEPTH)
 
 enum {HFNONE, HFALPHA, HFBETA, HFEXACT};
 
