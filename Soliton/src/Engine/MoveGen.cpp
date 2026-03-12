@@ -6,7 +6,6 @@
 
 int MoveGen::epCaptDiff[2] = {-8, 8};
 
-static U64 bb_bk[14];
 bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pinned){
 	
 	if (Move::isCastle(move)){
@@ -43,6 +42,8 @@ bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pi
 	if (isPinned){
 		return (BitBoardGen::LINES_BB[from][to] & BitBoardGen::SQUARES[startKingSQ]) != 0;
 	}
+
+	U64 bb_bk[14];
 
 	//EP or King moving
 	for (int j = 0; j < 14; ++j)

@@ -5,6 +5,7 @@
 #include "Engine/BitBoardGen.h"
 #include "Engine/Zobrist.h"
 #include "Engine/UCI.h"
+#include "Engine/MoveGen.h"
 
 
 int main() {
@@ -15,12 +16,15 @@ int main() {
 	Search::init_search();
 	UCI::loop();
 	
-	// Board board = Board::fromFEN("8/4k3/3ppp2/8/8/1B6/B7/K7 w - - 0 1");
-	// EvalInfo ei;
-	// Evaluation::computeAttacks(board, ei);
-	// std::cout << "Rook atacks " << ei.attackInfo.rookAttackersKing[0] << std::endl;
-	// std::cout << "Kn atacks " << ei.attackInfo.knightAttackersKing[0] << std::endl;
-	// std::cout << "Bishop atacks " << ei.attackInfo.bishopAttackersKing[0] << std::endl;
-	// std::cout << "Queen atacks " << ei.attackInfo.queenAttackersKing[0] << std::endl;
+	// Board board = Board::fromFEN("2K5/2P1k3/1R2n3/2r5/8/8/8/8 w - - 1 1");
+	// MoveList moves;
+	// MoveGen::pseudoLegalMoves(&board, board.state.currentPlayer, moves, false);
+
+	// for (int i = 0; i < moves.size(); i++) {
+    //     bool exist = HashTable::moveExists(board, moves.get(i), board.state.currentPlayer);
+	// 	std::cout << Move::toLongNotation(moves.get(i)) << " " << (exist ? "ok": "invalid") << std::endl;
+		
+    // }
+	
 	return 0;
 }

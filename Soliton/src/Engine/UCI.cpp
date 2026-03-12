@@ -8,12 +8,12 @@
 #include <sstream>
 
 std::vector<std::thread> UCI::workers;
-int num_threads = 2;
+int num_threads = 4;
 
 void UCI::loop() {
     Evaluation::initAll();
     Board board = Board::fromStartPosition();
-    HashTable* tt = new HashTable(256);
+    HashTable* tt = new HashTable();
     board.setHashTable(tt);
 
     std::string line;

@@ -92,6 +92,7 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
     localNodes = 0;
     int bestMove = Move::NO_MOVE;
     int score = 0;
+    int pvCount = 0;
 
     // Use maxDepth directly here too
     for (int d = 1; d <= maxDepth; d++) {
@@ -101,7 +102,7 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
         // Use static stopped flag
         if (Search::stopped) break;
 
-        int pvCount = HashTable::getPVLine(d, board);
+        pvCount = HashTable::getPVLine(d, board);
 
         // ONLY print to the console if this is the main thread!
         if (isMainThread) {
@@ -114,7 +115,9 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
             std::cout << std::endl;
         }
         
-        bestMove = board.pvArray[0];
+        if (pvCount > 0) {
+            bestMove = board.pvArray[0];
+        }
         if (score > MATE || score < -MATE) break;
     }
 
@@ -138,6 +141,12 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
         Search::stop();
         std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
     }
+
+    // if (isMainThread && !HashTable::moveExists(board, bestMove, board.state.currentPlayer)) {
+    //      std::cout << "info string ILLEGAL MOVE! PV CNT: " << pvCount 
+    //           << " FEN: " << board.toFEN() 
+    //           << " MOVE: " << Move::toLongNotation(bestMove) << std::endl;
+    // }
         
     return bestMove;
 }
