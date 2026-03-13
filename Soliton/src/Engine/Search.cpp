@@ -286,6 +286,28 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     MoveGen::pseudoLegalMoves(&board, side, moves, inCheck);
     sortMoves(moves, board, pvMove, board.ply);
 
+    //@begin change
+    // Root Move Randomization for Lazy SMP
+    // Rotate move list differently per worker thread to diversify search
+    if (board.ply == 0 && threadId > 0) {
+        int count = moves.size();
+
+        if (count > 1) {
+            int offset = threadId % count;
+
+            if (offset != 0) {
+                int first = moves.get(0);
+
+                for (int i = 0; i < offset; i++) {
+                    moves.set(i, moves.get(i + 1));
+                }
+
+                moves.set(offset, first);
+            }
+        }
+    }
+    //@end change
+
     int legalMovesCount = 0;
     int oldAlpha = alpha;
     int score = -INFINITE;
