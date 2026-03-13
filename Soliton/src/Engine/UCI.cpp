@@ -162,6 +162,10 @@ void UCI::parseGo(std::string line, Board& board) {
 
     for (int i = 0; i < num_threads; ++i) {
         workers.emplace_back([board, depth, movetime, i]() mutable {
+            // Give the main thread (0) a tiny head start to populate TT
+            if (i > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(i * 5));
+            }
             Search searcher(i);
             bool isMain = (i == 0);
             searcher.iterativeDeepening(board, depth, movetime, isMain);

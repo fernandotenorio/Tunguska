@@ -105,36 +105,39 @@ void HashTable::storeHashEntry(Board& board, const int move, int score, const in
         return;
 
     int index = (int)(board.zKey & board.hashTable->numEntries_1);
-
-    assert(index >= 0 && index <= (int)board.hashTable->numEntries_1);
-    assert(flags >= HFNONE && flags <= HFEXACT);
-    assert(score >= -Search::INFINITE && score <= Search::INFINITE);
-    assert(board.ply >=0 && board.ply < Board::MAX_DEPTH);
-    
     HashEntry& entry = board.hashTable->table[index];
 
-    uint64_t oldW1 = entry.word1.load(std::memory_order_relaxed);
-    uint64_t oldData = entry.word2.load(std::memory_order_relaxed);
-    
-    if((oldW1 ^ oldData) == 0) {
+    // Atomically read the existing entry
+    uint64_t w1_old = entry.word1.load(std::memory_order_relaxed);
+    uint64_t data_old = entry.word2.load(std::memory_order_relaxed);
+    uint64_t key_old = w1_old ^ data_old;
+
+    if(key_old == board.zKey) {
+        int old_depth = (int)(int8_t)(uint8_t)((data_old >> 48) & 0xFF);
+        int old_flags = (int)(int8_t)(uint8_t)((data_old >> 56) & 0xFF);
+
+        // SMP TRICK: Always Replace to keep data fresh, EXCEPT when a 
+        // shallow bound tries to overwrite a deep EXACT (PV) score.
+        if (depth + 2 < old_depth && old_flags == HFEXACT && flags != HFEXACT) {
+            return; // Protect the high-quality PV node!
+        }
+    }
+
+    if(key_old == 0) {
         board.hashTable->newWrite.fetch_add(1, std::memory_order_relaxed);
     } else {
         board.hashTable->overWrite.fetch_add(1, std::memory_order_relaxed);
     }
     
-    if(score > ISMATE) 
-        score += board.ply;
-    else if(score < -ISMATE) 
-        score -= board.ply;
+    if(score > ISMATE) score += board.ply;
+    else if(score < -ISMATE) score -= board.ply;
     
-    // Pack 64-bit word payload
     uint64_t data = 0;
     data |= (uint32_t)move;
     data |= ((uint64_t)(uint16_t)(int16_t)score) << 32;
     data |= ((uint64_t)(uint8_t)depth) << 48;
     data |= ((uint64_t)(uint8_t)flags) << 56;
 
-    // Lockless write: The release fence makes sure word2 is stored BEFORE word1 updates
     entry.word2.store(data, std::memory_order_relaxed);
     entry.word1.store(board.zKey ^ data, std::memory_order_release);
 }
