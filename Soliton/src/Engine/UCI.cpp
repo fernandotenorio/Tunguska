@@ -8,7 +8,7 @@
 #include <sstream>
 
 std::vector<std::thread> UCI::workers;
-int num_threads = 4;
+int num_threads = 1;
 
 void UCI::loop() {
     Evaluation::initAll();

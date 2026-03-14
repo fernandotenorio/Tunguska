@@ -142,12 +142,6 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
         std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
     }
 
-    // if (isMainThread && !HashTable::moveExists(board, bestMove, board.state.currentPlayer)) {
-    //      std::cout << "info string ILLEGAL MOVE! PV CNT: " << pvCount 
-    //           << " FEN: " << board.toFEN() 
-    //           << " MOVE: " << Move::toLongNotation(bestMove) << std::endl;
-    // }
-        
     return bestMove;
 }
 
@@ -215,7 +209,11 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
     // 1. Periodic Resource Check
-    if ((localNodes & 1023) == 0) checkTime();
+    if ((localNodes & 1023) == 0) {
+        checkTime();
+        Search::totalNodes += localNodes;
+        localNodes = 0;
+    }
     if (stopped) return 0;
 
     // 2. Draw Detection
@@ -507,7 +505,11 @@ int Search::quiescence(Board& board, int alpha, int beta) {
     assert(alpha < beta);
 
     // 1. Periodic Resource Check
-    if ((localNodes & 1023) == 0) checkTime();
+    if ((localNodes & 1023) == 0) {
+        checkTime();
+        Search::totalNodes += localNodes;
+        localNodes = 0;
+    }
     if (stopped) return 0;
 
     localNodes++;
