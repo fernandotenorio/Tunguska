@@ -319,13 +319,13 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         int move = moves.get(i);
 
         FeatureChanges changes = FeatureExtractor::moveDiffFeatures(board, move);
-        nnue_state.update(changes);
         BoardState undo = board.makeMove(move);
 
         if (!undo.valid) {
-            nnue_state.updateUndo(changes);
             continue;
         }
+
+        nnue_state.update(changes);
 
         legalMovesCount++;
         int captured = Move::captured(move);
@@ -588,16 +588,15 @@ int Search::quiescence(Board& board, int alpha, int beta) {
         }
 
         FeatureChanges changes = FeatureExtractor::moveDiffFeatures(board, move);
-		nnue_state.update(changes);
         BoardState undo = board.makeMove(move);
 
-        if (!undo.valid) {
-            nnue_state.updateUndo(changes);
+        if (!undo.valid) {            
             continue;
         }
 
+        nnue_state.update(changes);
+        
         legalMoves++;
-
         int score = -quiescence(board, -beta, -alpha);
 
         nnue_state.updateUndo(changes);
