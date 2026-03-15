@@ -60,12 +60,6 @@
     <ClCompile Include="src\Engine\UCI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Engine\TestSuite.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Engine\EvalFen.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\cnpy.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -120,12 +114,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\Engine\UCI.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\Engine\TestSuite.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\Engine\EvalFen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\cnpy.h">
@@ -1214,7 +1202,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="positions.fen" />
-    <None Include="bench.epd" />
     <None Include="includes\Eigen\src\Core\arch\AltiVec\MatrixVectorProduct.inc">
       <Filter>Header Files</Filter>
     </None>

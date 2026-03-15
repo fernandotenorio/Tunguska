@@ -60,7 +60,7 @@ void Search::init_search() {
     }
 
     // NNUE
-    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_9.npz");
+    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_9_quant.npz");
 }
 
 void Search::historyStats(Board& board){

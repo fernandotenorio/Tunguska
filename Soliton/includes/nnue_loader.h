@@ -1,59 +1,45 @@
 #ifndef NNUELOADER_H
 #define NNUELOADER_H
 
-#include <Eigen/Dense>
 #include <string>
 #include <vector>
+#include <cstdint>
 #include "NNUEConstants.h"
-//#include "FeatureExtractor.h"
 
-// Forward declaration
 class Board;
 struct FeatureChanges; 
 struct StartingFeatures;
 
-// 1. The Accumulator Structure (Stateful)
+// 1. Aligned Accumulator
 struct NNUEAccumulator {
-    float v[2][HL_SIZE]; // White and Black accumulators
+    alignas(64) int16_t v[2][HL_SIZE]; 
 
-    float* operator[](int stm) {
-        return v[stm];
-    }
-    const float* operator[](int stm) const {
-        return v[stm];
-    }
+    int16_t* operator[](int stm) { return v[stm]; }
+    const int16_t* operator[](int stm) const { return v[stm]; }
 };
 
-// 2. The Network Weights (Stateless, Read-Only, Shared)
+// 2. Aligned Network Weights
 class NNUENetwork {
 public:
-    static Eigen::MatrixXf accumulator_weight;
-    static Eigen::VectorXf output_weights;
-    static Eigen::VectorXf accumulator_bias;
-    static float output_bias;
+    alignas(64) static int16_t accumulator_weight[INPUT_SIZE][HL_SIZE];
+    alignas(64) static int16_t accumulator_bias[HL_SIZE];
+    alignas(64) static int16_t output_weights[2 * HL_SIZE];
+    static int32_t output_bias;
     static bool weights_loaded;
 
     static void loadWeights(const std::string& filename);
 };
 
-// 3. The Computation State (Thread-Local)
 class NNUEState {
 public:
     NNUEAccumulator accumulator;
-    Eigen::VectorXf combined_accumulator;
 
-    NNUEState();
+    NNUEState() = default;
     
-    // Reset accumulator from scratch (for root position or new game)
     void init(const Board& board);
-
-    // Update accumulator incrementally (make move)
     void update(const FeatureChanges& changes);
-    
-    // Update accumulator incrementally (undo move)
     void updateUndo(const FeatureChanges& changes);
-
-    // Calculate final score
+    
     int evaluate(Side stm);
 };
 

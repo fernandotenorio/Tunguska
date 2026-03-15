@@ -255,21 +255,44 @@ def train(chunk_paths, val_path, checkpoint_folder, epochs=10, batch_size=16384,
 
 
 # ==============================================================================
-# C++ ENGINE EXPORT LOGIC
+# C++ ENGINE EXPORT LOGIC (QUANTIZED)
 # ==============================================================================
 def save_npz(checkpoint_path, outfile):
     print(f"Loading checkpoint {checkpoint_path}...")
     checkpoint_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     state_dict = checkpoint_dict['model_state_dict']
+    
+    # Quantization multipliers
+    QA = 255.0
+    SCALE = 400.0
+    
     weights = {}
     
-    weights['accumulator.weight'] = state_dict['ft.weight'].numpy()
-    weights['accumulator.bias'] = state_dict['ft.bias'].numpy()
-    weights['output_weights'] = state_dict['out.weight'].numpy().T
-    weights['output_bias'] = state_dict['out.bias'].numpy()
+    # 1. Accumulator (Force C-Contiguous Memory Layout!)
+    ft_weight = np.ascontiguousarray(state_dict['ft.weight'].numpy().T) * QA
+    weights['accumulator.weight'] = np.ascontiguousarray(
+        np.clip(np.round(ft_weight), -32768, 32767).astype(np.int16)
+    )
+    
+    ft_bias = np.ascontiguousarray(state_dict['ft.bias'].numpy()) * QA
+    weights['accumulator.bias'] = np.ascontiguousarray(
+        np.clip(np.round(ft_bias), -32768, 32767).astype(np.int16)
+    )
+    
+    # 2. Output Layer (Force C-Contiguous Memory Layout!)
+    out_weight = np.ascontiguousarray(state_dict['out.weight'].numpy().T) * SCALE
+    weights['output_weights'] = np.ascontiguousarray(
+        np.clip(np.round(out_weight), -32768, 32767).astype(np.int16)
+    )
+    
+    # 3. Output Bias
+    out_bias = np.ascontiguousarray(state_dict['out.bias'].numpy()) * QA * SCALE
+    weights['output_bias'] = np.ascontiguousarray(
+        np.round(out_bias).astype(np.int32)
+    )
     
     np.savez(f"{outfile}.npz", **weights)
-    print(f"Successfully saved weights for C++ to {outfile}.npz")
+    print(f"Successfully saved INT QUANTIZED weights to {outfile}.npz")
 
 
 def gen_all_weights():

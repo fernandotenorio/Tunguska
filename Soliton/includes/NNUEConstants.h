@@ -2,7 +2,7 @@
 
 #define INPUT_SIZE 768
 #define HL_SIZE 128
-#define SCALE 400
+#define QA 255
 
 // Enums
 enum Side { BLACK_NNUE = 0, WHITE_NNUE = 1 };
