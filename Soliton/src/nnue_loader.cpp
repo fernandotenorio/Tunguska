@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm> // for std::clamp
 #include <cstring>   // for std::memcpy
+#include <immintrin.h>
 
 // =========================================================
 // 1. NNUENetwork (Static Weights)
@@ -128,23 +129,60 @@ void NNUEState::updateUndo(const FeatureChanges& changes) {
 }
 
 int NNUEState::evaluate(Side stm) {
-    int32_t sum = NNUENetwork::output_bias;
     Side them = static_cast<Side>(1 - stm);
 
+    // Because we used alignas(64), we can safely use the ultra-fast ALIGNED load instructions
     const int16_t* us_acc = accumulator.v[stm];
     const int16_t* them_acc = accumulator.v[them];
     const int16_t* out_w_us = NNUENetwork::output_weights;
     const int16_t* out_w_them = NNUENetwork::output_weights + HL_SIZE;
 
-    // A single, tightly packed loop. 
-    // The compiler will turn this into the blazing fast `vpmaddwd` instruction!
-    for (int i = 0; i < HL_SIZE; ++i) {
-        int16_t act_us = std::max<int16_t>(0, std::min<int16_t>(QA, us_acc[i]));
-        sum += static_cast<int32_t>(act_us) * out_w_us[i];
+    // Set up AVX2 vector constants (256-bit registers)
+    __m256i zero = _mm256_setzero_si256();
+    __m256i qa   = _mm256_set1_epi16(QA);
+    __m256i sum256 = _mm256_setzero_si256();
 
-        int16_t act_them = std::max<int16_t>(0, std::min<int16_t>(QA, them_acc[i]));
-        sum += static_cast<int32_t>(act_them) * out_w_them[i];
+    // We process 16 elements (32 bytes) per loop iteration
+    for (int i = 0; i < HL_SIZE; i += 16) {
+        // --- Process US ---
+        // 1. Load 16 accumulator values into a register
+        __m256i act_us = _mm256_load_si256((const __m256i*)&us_acc[i]);
+        // 2. Clamp between 0 and QA (16 at a time!)
+        act_us = _mm256_max_epi16(act_us, zero);
+        act_us = _mm256_min_epi16(act_us, qa);
+        // 3. Load 16 output weights
+        __m256i w_us = _mm256_load_si256((const __m256i*)&out_w_us[i]);
+        // 4. Multiply and Add adjacent pairs (The magical vpmaddwd instruction!)
+        __m256i prod_us = _mm256_madd_epi16(act_us, w_us);
+        // 5. Accumulate into 32-bit sums
+        sum256 = _mm256_add_epi32(sum256, prod_us);
+
+        // --- Process THEM ---
+        __m256i act_them = _mm256_load_si256((const __m256i*)&them_acc[i]);
+        act_them = _mm256_max_epi16(act_them, zero);
+        act_them = _mm256_min_epi16(act_them, qa);
+        
+        __m256i w_them = _mm256_load_si256((const __m256i*)&out_w_them[i]);
+        __m256i prod_them = _mm256_madd_epi16(act_them, w_them);
+        sum256 = _mm256_add_epi32(sum256, prod_them);
     }
 
-    return sum / QA;
+    // --- Horizontal Sum ---
+    // At this point, sum256 holds EIGHT separate 32-bit integers. 
+    // We need to fold them all together into a single standard int.
+    
+    // 1. Extract the upper 128 bits and add to the lower 128 bits
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum256), _mm256_extracti128_si256(sum256, 1));
+    
+    // 2. Shuffle and add (reduces 4 ints to 2 ints)
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
+    
+    // 3. Shuffle and add (reduces 2 ints to 1 int)
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    
+    // 4. Extract the final single integer from the register
+    int final_sum = _mm_cvtsi128_si32(sum128);
+
+    // Add the bias and scale back down
+    return (final_sum + NNUENetwork::output_bias) / QA;
 }
