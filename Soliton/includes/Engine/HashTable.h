@@ -25,6 +25,7 @@ class HashTable {
 public:
     HashTable();
     HashTable(int sizeMB);
+    ~HashTable();
     void initHash(int size);
     static bool probeHashEntry(Board& board, int *move, int *score, int alpha, int beta, int depth);
     static int probePvMove(Board& board);

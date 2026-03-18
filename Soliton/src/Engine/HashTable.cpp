@@ -188,3 +188,7 @@ void HashTable::reset(){
     }
     newWrite.store(0, std::memory_order_relaxed);
 }
+
+HashTable::~HashTable() {
+    delete[] table;
+}

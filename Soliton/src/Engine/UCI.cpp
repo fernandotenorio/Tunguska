@@ -18,11 +18,16 @@ void UCI::loop() {
     while (std::getline(std::cin, line)) {
         if (line == "uci") {
             std::cout << "id name Soliton" << std::endl;
-            std::cout << "id Fernando Mir" << std::endl;
+            std::cout << "id author Fernando Mir" << std::endl;
+            std::cout << "option name Threads type spin default 1 min 1 max 512" << std::endl;
+            std::cout << "option name Hash type spin default 256 min 1 max 8192" << std::endl;
             std::cout << "uciok" << std::endl;
         }
         else if (line == "isready") {
             std::cout << "readyok" << std::endl;
+        }
+        else if (line.find("setoption") == 0) {
+            parseSetOption(line, board, tt);
         }
         else if (line == "ucinewgame") {
             // Ensure search is stopped before resetting
@@ -66,8 +71,67 @@ void UCI::loop() {
                 if (t.joinable())
                     t.join();
             }
+            delete tt; // delete the hash table before exiting!
             break;
         }
+    }
+}
+
+void UCI::parseSetOption(std::string line, Board& board, HashTable*& tt) {
+    std::stringstream ss(line);
+    std::string token;
+    
+    ss >> token; // skip "setoption"
+    ss >> token; // skip "name"
+
+    std::string name = "";
+    // Read the option name until we hit "value"
+    while (ss >> token && token != "value") {
+        if (!name.empty()) name += " ";
+        name += token;
+    }
+
+    std::string valueStr = "";
+    // Read the value parameter
+    if (ss >> token) {
+        valueStr = token; 
+    }
+
+    // Convert option name to lowercase for robust matching
+    // (Some GUIs send "Threads", others send "threads")
+    for (char& c : name) c = std::tolower(c);
+
+    if (name == "threads") {
+        try {
+            int threads = std::stoi(valueStr);
+            if (threads > 0) {
+                num_threads = threads; // Update global thread count
+            }
+        } catch (const std::exception& e) {
+            // Ignore invalid/non-integer values gracefully
+        }
+    }
+    else if (name == "hash") {
+        try {
+            int hashSize = std::stoi(valueStr);
+            if (hashSize > 0) {
+                // Stop search and wait for threads to finish 
+                // before deleting the memory they are actively reading/writing.
+                Search::stop();
+                for (auto& t : workers) {
+                    if (t.joinable())
+                        t.join();
+                }
+                workers.clear();
+
+                // Free old table memory
+                delete tt;
+                
+                // Allocate new table and attach it
+                tt = new HashTable(hashSize);
+                board.setHashTable(tt);
+            }
+        } catch (const std::exception& e) {}
     }
 }
 
@@ -117,12 +181,54 @@ void UCI::parseGo(std::string line, Board& board) {
     int depth = Board::MAX_DEPTH; 
     long long movetime = -1;      
 
+    // New variables for time control parsing
+    long long wtime = 0, btime = 0;
+    long long winc = 0, binc = 0;
+    int movestogo = 0;
+    bool infinite = false;
+
     std::stringstream ss(line);
     std::string token;
 
     while (ss >> token) {
         if (token == "depth") ss >> depth;
         else if (token == "movetime") ss >> movetime;
+        else if (token == "wtime") ss >> wtime;
+        else if (token == "btime") ss >> btime;
+        else if (token == "winc") ss >> winc;
+        else if (token == "binc") ss >> binc;
+        else if (token == "movestogo") ss >> movestogo;
+        else if (token == "infinite") infinite = true;
+    }
+
+    // --- Time Management ---
+    if (infinite) {
+        // -1 acts as infinity; the search will run until a "stop" command is sent
+        movetime = -1; 
+    } else if (movetime == -1) {
+        // Only calculate time if an explicit "movetime" wasn't provided
+        bool isWhite = board.state.currentPlayer == Board::WHITE;
+        long long timeLeft = isWhite ? wtime : btime;
+        long long inc = isWhite ? winc : binc;
+
+        if (timeLeft > 0) {
+            if (movestogo > 0) {
+                // If we know moves to go, allocate a fraction of remaining time + increment
+                movetime = timeLeft / movestogo + inc;
+            } else {
+                // Sudden death time control: assume roughly 40 moves left on average
+                movetime = timeLeft / 40 + inc;
+            }
+            
+            // Only apply a strict overhead subtraction if the calculated
+            // movetime is dangerously close to our total time left.
+            // This guarantees we don't flag, but doesn't artificially limit
+            // search time when we have plenty of time on the clock.
+            int moveOverhead = 10;
+            if (movetime >= timeLeft - moveOverhead) {
+                movetime = std::max((long long)1, timeLeft - moveOverhead);
+            }
+        }
     }
 
      // --- stop previous search ---
