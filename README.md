@@ -14,10 +14,10 @@ Tunguska is a UCI-compliant chess engine written in C++. It uses a bitboard repr
 Tunguska's positional evaluation is handled by an NNUE network. The network weights were trained on a dataset of approximately 600 million FEN positions.
 
 -   **Architecture**: `(768 -> 128) x 2 -> 1`
-    -   Input: "HalfKP" feature representation (768 neurons).
+    -   Input: A simple `piece-square-color` representation of size 6 x 64 x 2 = 768.
     -   Hidden Layer: A single layer with 128 neurons and Clipped ReLU activation, with separate accumulators for each player's perspective.
     -   Output: A single neuron producing the evaluation score.
--   **Embedded Weights**: The neural network weights are embedded directly into the source code. The engine does not require an external `.nnue` file to run.
+-   **Embedded Weights**: The quantized neural network weights are embedded directly into the source code. The engine does not require an external `.nnue` file to run.
 
 ## Concurrency (SMP)
 Tunguska can utilize multiple CPU cores to accelerate its search.
