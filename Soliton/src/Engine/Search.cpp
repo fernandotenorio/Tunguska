@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
-#include "FeatureExtractor.h"
+#include "NNUE/FeatureExtractor.h"
 
 std::atomic<bool> Search::stopped{false};
 long long Search::timeLimit = -1;
@@ -58,9 +58,7 @@ void Search::init_search() {
             }
         }
     }
-
-    // NNUE
-    NNUENetwork::loadWeights("D:\\cpp_projs\\Soliton\\Soliton\\weights\\net_9_quant.npz");
+    // load NNUE weights here if loading from external file
 }
 
 void Search::historyStats(Board& board){

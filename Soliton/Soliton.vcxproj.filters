@@ -60,13 +60,10 @@
     <ClCompile Include="src\Engine\UCI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\cnpy.cpp">
+    <ClCompile Include="src\NNUE\FeatureExtractor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\FeatureExtractor.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\nnue_loader.cpp">
+    <ClCompile Include="src\NNUE\nnue_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -114,24 +111,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\Engine\UCI.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\cnpy.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\FeatureExtractor.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\nnue_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\NNUEConstants.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\zconf.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\zlib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\Eigen\src\AccelerateSupport\AccelerateSupport.h">
@@ -1194,6 +1173,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\Eigen\src\UmfPackSupport\UmfPackSupport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\FeatureExtractor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_loader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\NNUEConstants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

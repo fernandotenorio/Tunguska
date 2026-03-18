@@ -1,7 +1,6 @@
-#include "nnue_loader.h"
 #include "Engine/Board.h"
-#include "FeatureExtractor.h"
-#include "cnpy.h"
+#include "NNUE/nnue_loader.h"
+#include "NNUE/FeatureExtractor.h"
 #include <iostream>
 #include <algorithm> // for std::clamp
 #include <cstring>   // for std::memcpy
@@ -10,32 +9,17 @@
 // =========================================================
 // 1. NNUENetwork (Static Weights)
 // =========================================================
+
+#include "NNUE/nnue_weights.h"
+// All declared and loaded inside the header
+/*
 int16_t NNUENetwork::accumulator_weight[INPUT_SIZE][HL_SIZE];
 int16_t NNUENetwork::accumulator_bias[HL_SIZE];
 int16_t NNUENetwork::output_weights[2 * HL_SIZE];
 int32_t NNUENetwork::output_bias = 0;
 bool NNUENetwork::weights_loaded = false;
+*/
 
-void NNUENetwork::loadWeights(const std::string& filename) {
-    if (weights_loaded) return;
-
-    cnpy::npz_t npz = cnpy::npz_load(filename);
-
-    // Fetch the quantized integer arrays
-    int16_t* acc_w = npz["accumulator.weight"].data<int16_t>();
-    int16_t* acc_b = npz["accumulator.bias"].data<int16_t>();
-    int16_t* out_w = npz["output_weights"].data<int16_t>();
-    int32_t* out_b = npz["output_bias"].data<int32_t>();
-
-    // Copy directly into fast 1D/2D C-arrays
-    std::memcpy(accumulator_weight, acc_w, INPUT_SIZE * HL_SIZE * sizeof(int16_t));
-    std::memcpy(accumulator_bias, acc_b, HL_SIZE * sizeof(int16_t));
-    std::memcpy(output_weights, out_w, 2 * HL_SIZE * sizeof(int16_t));
-    output_bias = out_b[0];
-
-    weights_loaded = true;
-    std::cout << "Quantized INT16/INT32 NNUE Weights loaded." << std::endl;
-}
 
 // =========================================================
 // 2. NNUEState (Thread-Local Calculation)

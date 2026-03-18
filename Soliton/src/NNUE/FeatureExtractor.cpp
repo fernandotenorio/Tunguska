@@ -1,4 +1,4 @@
-#include "FeatureExtractor.h"
+#include "NNUE/FeatureExtractor.h"
 #include "Engine/MoveGen.h"
 #include <sstream>
 

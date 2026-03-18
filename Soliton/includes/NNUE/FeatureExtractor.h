@@ -3,7 +3,7 @@
 #include <utility>
 #include "Engine/Board.h"
 #include "Engine/defs.h"
-#include "NNUEConstants.h"
+#include "NNUE/NNUEConstants.h"
 
 // Max pieces on board = 32. Fixed size array prevents heap allocation.
 struct StartingFeatures {

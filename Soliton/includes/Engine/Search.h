@@ -5,7 +5,7 @@
 #include "Move.h"
 #include <chrono>
 #include <atomic>
-#include "nnue_loader.h"
+#include "NNUE/nnue_loader.h"
 
 class Search {
 public:

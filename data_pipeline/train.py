@@ -295,6 +295,62 @@ def save_npz(checkpoint_path, outfile):
     print(f"Successfully saved INT QUANTIZED weights to {outfile}.npz")
 
 
+def save_weights_header(checkpoint_path, outfile):
+    print(f"Loading checkpoint {checkpoint_path}...")
+    checkpoint_dict = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+    state_dict = checkpoint_dict['model_state_dict']
+    
+    # Quantization multipliers
+    QA = 255.0
+    SCALE = 400.0
+    
+    # 1. Accumulator
+    ft_weight = np.ascontiguousarray(state_dict['ft.weight'].numpy().T) * QA
+    acc_weight = np.clip(np.round(ft_weight), -32768, 32767).astype(np.int16)
+    
+    ft_bias = np.ascontiguousarray(state_dict['ft.bias'].numpy()) * QA
+    acc_bias = np.clip(np.round(ft_bias), -32768, 32767).astype(np.int16)
+    
+    # 2. Output Layer
+    out_weight = np.ascontiguousarray(state_dict['out.weight'].numpy().T) * SCALE
+    out_weights = np.clip(np.round(out_weight), -32768, 32767).astype(np.int16)
+    
+    # 3. Output Bias
+    out_b = np.ascontiguousarray(state_dict['out.bias'].numpy()) * QA * SCALE
+    out_bias = np.round(out_b).astype(np.int32)
+
+    print("Generating nnue_weights.h (this might take a few seconds)...")
+    
+    with open(f"{outfile}", "w") as f:
+        f.write("// AUTO-GENERATED NNUE WEIGHTS\n")
+        f.write("// DO NOT INCLUDE THIS FILE ANYWHERE EXCEPT IN nnue_loader.cpp!\n\n")
+        
+        # Write Accumulator Weight (2D Array)
+        f.write(f"alignas(64) const int16_t NNUENetwork::accumulator_weight[{acc_weight.shape[0]}][{acc_weight.shape[1]}] = {{\n")
+        for row in acc_weight:
+            f.write("    {" + ", ".join(map(str, row)) + "},\n")
+        f.write("};\n\n")
+        
+        # Write Accumulator Bias (1D Array)
+        f.write(f"alignas(64) const int16_t NNUENetwork::accumulator_bias[{acc_bias.shape[0]}] = {{\n")
+        f.write("    " + ", ".join(map(str, acc_bias)) + "\n")
+        f.write("};\n\n")
+        
+        # Write Output Weights (1D Array)
+        f.write(f"alignas(64) const int16_t NNUENetwork::output_weights[{out_weights.size}] = {{\n")
+        f.write("    " + ", ".join(map(str, out_weights.flatten())) + "\n")
+        f.write("};\n\n")
+        
+        # Write Output Bias (Single Value)
+        val = out_bias.item() if out_bias.size == 1 else out_bias[0]
+        f.write(f"const int32_t NNUENetwork::output_bias = {val};\n")
+        
+        # We don't need weights_loaded anymore, but we can set it to true just in case
+        f.write("bool NNUENetwork::weights_loaded = true;\n")
+        
+    print(f"Successfully saved INT QUANTIZED weights to {outfile}")
+
+
 def gen_all_weights():
     nets = glob.glob("../checkpoints/*_COMPLETE.pt")
     for net in nets:

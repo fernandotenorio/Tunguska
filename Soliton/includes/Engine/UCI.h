@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 #include <thread>
-#include "Board.h"
-#include "HashTable.h"
+#include "Engine/Board.h"
+#include "Engine/HashTable.h"
 
 class UCI {
 public:

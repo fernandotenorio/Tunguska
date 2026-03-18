@@ -102,8 +102,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);zlibstaticd.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -126,8 +126,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);zlibstaticd.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -146,8 +146,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);zlibstaticd.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -170,12 +170,11 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);zlibstaticd.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\cnpy.cpp" />
     <ClCompile Include="src\Engine\BitBoardGen.cpp" />
     <ClCompile Include="src\Engine\Board.cpp" />
     <ClCompile Include="src\Engine\BoardState.cpp" />
@@ -190,12 +189,11 @@
     <ClCompile Include="src\Engine\StringUtils.cpp" />
     <ClCompile Include="src\Engine\UCI.cpp" />
     <ClCompile Include="src\Engine\Zobrist.cpp" />
-    <ClCompile Include="src\FeatureExtractor.cpp" />
     <ClCompile Include="src\Main.cpp" />
-    <ClCompile Include="src\nnue_loader.cpp" />
+    <ClCompile Include="src\NNUE\FeatureExtractor.cpp" />
+    <ClCompile Include="src\NNUE\nnue_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="includes\cnpy.h" />
     <ClInclude Include="includes\Eigen\src\AccelerateSupport\AccelerateSupport.h" />
     <ClInclude Include="includes\Eigen\src\AccelerateSupport\InternalHeaderCheck.h" />
     <ClInclude Include="includes\Eigen\src\Cholesky\InternalHeaderCheck.h" />
@@ -565,11 +563,10 @@
     <ClInclude Include="includes\Engine\StringUtils.h" />
     <ClInclude Include="includes\Engine\UCI.h" />
     <ClInclude Include="includes\Engine\Zobrist.h" />
-    <ClInclude Include="includes\FeatureExtractor.h" />
-    <ClInclude Include="includes\NNUEConstants.h" />
-    <ClInclude Include="includes\nnue_loader.h" />
-    <ClInclude Include="includes\zconf.h" />
-    <ClInclude Include="includes\zlib.h" />
+    <ClInclude Include="includes\NNUE\FeatureExtractor.h" />
+    <ClInclude Include="includes\NNUE\NNUEConstants.h" />
+    <ClInclude Include="includes\NNUE\nnue_loader.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="perft.txt" />

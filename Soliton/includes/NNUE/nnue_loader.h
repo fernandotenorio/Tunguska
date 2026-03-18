@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "NNUEConstants.h"
+#include "NNUE/NNUEConstants.h"
 
 class Board;
 struct FeatureChanges; 
@@ -21,25 +21,21 @@ struct NNUEAccumulator {
 // 2. Aligned Network Weights
 class NNUENetwork {
 public:
-    alignas(64) static int16_t accumulator_weight[INPUT_SIZE][HL_SIZE];
-    alignas(64) static int16_t accumulator_bias[HL_SIZE];
-    alignas(64) static int16_t output_weights[2 * HL_SIZE];
-    static int32_t output_bias;
+    alignas(64) static const int16_t accumulator_weight[INPUT_SIZE][HL_SIZE];
+    alignas(64) static const int16_t accumulator_bias[HL_SIZE];
+    alignas(64) static const int16_t output_weights[2 * HL_SIZE];
+    static const int32_t output_bias;
     static bool weights_loaded;
-
-    static void loadWeights(const std::string& filename);
 };
 
 class NNUEState {
 public:
     NNUEAccumulator accumulator;
-
     NNUEState() = default;
-    
+
     void init(const Board& board);
     void update(const FeatureChanges& changes);
     void updateUndo(const FeatureChanges& changes);
-    
     int evaluate(Side stm);
 };
 
