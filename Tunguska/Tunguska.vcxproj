@@ -22,7 +22,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{0b339046-bbad-44ec-8d82-a8e115c51be2}</ProjectGuid>
-    <RootNamespace>Soliton</RootNamespace>
+    <RootNamespace>Tunguska</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>Tunguska</ProjectName>
   </PropertyGroup>
