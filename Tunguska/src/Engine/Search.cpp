@@ -328,7 +328,27 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
         legalMovesCount++;
         int captured = Move::captured(move);
         int promoted = Move::promoteTo(move);
-        bool isQuiet = (captured == Board::EMPTY && promoted == Board::EMPTY);
+        bool isEP = Move::isEP(move);
+        bool isQuiet = (captured == Board::EMPTY && promoted == Board::EMPTY && !isEP);
+
+        // --- LATE MOVE PRUNING (LMP) ---
+        // If we are at a low depth, not in check, and have already searched enough moves...
+        if (false && depth <= 4 && !inCheck && isQuiet) {
+            // Formula: Allow more moves at higher depths (e.g., depth 1 = 5 moves, depth 2 = 11 moves)
+            int lmpThreshold = 3 + 2 * depth * depth;
+            
+            if (legalMovesCount > lmpThreshold) {
+                // Don't prune killers or PV moves!
+                if (move != pvMove && 
+                    move != board.searchKillers[0][board.ply] && 
+                    move != board.searchKillers[1][board.ply]) {
+                    
+                    nnue_state.updateUndo(changes);
+                    board.undoMove(move, undo);
+                    continue; // Skip this move!
+                }
+            }
+        }
 
         // Futility prune quiet moves at low depth
         if (legalMovesCount > 1 && futility_prune && isQuiet &&
@@ -568,20 +588,27 @@ int Search::quiescence(Board& board, int alpha, int beta) {
         if (!inCheck) {
             int promote = Move::promoteTo(move);
             int captured = Move::captured(move);
+            bool isEP = Move::isEP(move);
+
+            // handle en passant correctly!
+            int capturedValue = isEP ? Evaluation::PIECE_VALUES[Board::WHITE_PAWN] : Evaluation::PIECE_VALUES[captured];
 
             // Delta Pruning
             if (promote == Board::EMPTY) {
-                int delta = abs(Evaluation::PIECE_VALUES[captured]) + 200;
+                int delta = abs(capturedValue) + 200;
                 if (standPat + delta < alpha) continue;
             }
 
             // SEE Pruning
+            // If it is En Passant, DO NOT use SEE pruning. 
+            // SEE struggles with the geometry of En Passant (the captured pawn is on a different square).
             if (promote == Board::EMPTY) {
                 int from = Move::from(move);
                 int to = Move::to(move);
                 int piece = board.board[from];
+
                 // Check if capture loses material
-                if (see(&board, to, captured, from, piece) < 0) continue;
+                if (!isEP && see(&board, to, captured, from, piece) < 0) continue;
             }
         }
 
