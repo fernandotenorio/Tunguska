@@ -50,6 +50,13 @@ private:
 
     int scoreMove(const Board& board, int move, int pvMove);
     void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply);
+
+    inline void updateHistory(int& currentHistory, int bonus) {
+        // The max value for history. Must be a power of 2 for some gravity formulas, but 16384 is standard.
+        const int MAX_HISTORY = 16384; 
+        // This is the "gravity" formula. The score moves towards the bonus, but moves slower as it gets closer to MAX_HISTORY.
+        currentHistory += bonus - currentHistory * abs(bonus) / MAX_HISTORY;
+    }
 };
 
 #endif

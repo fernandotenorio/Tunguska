@@ -333,9 +333,9 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
         // --- LATE MOVE PRUNING (LMP) ---
         // If we are at a low depth, not in check, and have already searched enough moves...
-        if (false && depth <= 4 && !inCheck && isQuiet) {
+        if (depth <= 4 && !inCheck && isQuiet) {
             // Formula: Allow more moves at higher depths (e.g., depth 1 = 5 moves, depth 2 = 11 moves)
-            int lmpThreshold = 3 + 2 * depth * depth;
+            int lmpThreshold = 3 + 4 * depth * depth;
             
             if (legalMovesCount > lmpThreshold) {
                 // Don't prune killers or PV moves!
@@ -420,16 +420,33 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
             if (score > alpha) {
                 if (score >= beta) {
-                    // Update Killers and History on Beta Cutoff
+                    // This is a Beta Cutoff (a "good" move)
+                    HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
+
                     if (isQuiet) {
+                        // 1. Update Killer Moves
                         board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
                         board.searchKillers[0][board.ply] = move;
 
+                        // 2. Calculate the bonus. Cap it to prevent runaway values.
+                        int bonus = std::min(depth * depth, 400);
+
+                        // 3. REWARD the move that caused the cutoff
                         int piece = board.board[Move::from(move)];
-                        board.searchHistory[piece][Move::to(move)] += depth * depth;
+                        updateHistory(board.searchHistory[piece][Move::to(move)], bonus);
+
+                        // 4. PENALIZE all the quiet moves we searched before this one that FAILED
+                        for (int j = 0; j < i; j++) {
+                            int prevMove = moves.get(j);
+                            int prevCap = Move::captured(prevMove);
+                            int prevProm = Move::promoteTo(prevMove);
+                            if (prevCap == Board::EMPTY && prevProm == Board::EMPTY && !Move::isEP(prevMove)) {
+                                int pPiece = board.board[Move::from(prevMove)];
+                                updateHistory(board.searchHistory[pPiece][Move::to(prevMove)], -bonus);
+                            }
+                        }
                     }
-                    HashTable::storeHashEntry(board, bestMove, beta, HFBETA, depth);
-                    return beta;
+                    return beta; // Fail-High
                 }
                 alpha = score;
             }
