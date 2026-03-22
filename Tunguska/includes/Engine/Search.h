@@ -33,7 +33,15 @@ public:
     long localNodes;
     NNUEState nnue_state;
 
-    Search(int id) : threadId(id), localNodes(0) {}
+    int counterMoveTable[64][64];
+
+    Search(int id) : threadId(id), localNodes(0) {
+        for (int i = 0; i < 64; ++i) {
+            for (int j = 0; j < 64; ++j) {
+                counterMoveTable[i][j] = 0;
+            }
+        }
+    }
 
     // --- NON-STATIC METHODS ---
     void historyStats(Board& board);
@@ -42,14 +50,14 @@ public:
     int aspirationWindow(Board& board, int depth, int score);
 
 private:
-    int alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull);
+    int alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull, int prevMove);
     int quiescence(Board& board, int alpha, int beta);
     int see(const Board* board, int toSq, int target, int fromSq, int aPiece);
     bool isBadCapture(const Board& board, int move, int side);
     void checkTime();
 
-    int scoreMove(const Board& board, int move, int pvMove);
-    void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply);
+    int scoreMove(const Board& board, int move, int pvMove, int prevMove);
+    void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply, int prevMove);
 
     inline void updateHistory(int& currentHistory, int bonus) {
         // The max value for history. Must be a power of 2 for some gravity formulas, but 16384 is standard.

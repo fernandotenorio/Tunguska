@@ -173,7 +173,7 @@ int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTi
 int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
     if (depth <= 3)
-        return alphaBeta(board, -MATE, MATE, depth, true);
+        return alphaBeta(board, -MATE, MATE, depth, true, Move::NO_MOVE);
 
     int delta = 15;
     int alpha = std::max(-MATE, prevScore - delta);
@@ -181,7 +181,7 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
     while (true) {
 
-        int score = alphaBeta(board, alpha, beta, depth, true);
+        int score = alphaBeta(board, alpha, beta, depth, true, Move::NO_MOVE);
 
         if (stopped)
             return score;
@@ -199,13 +199,13 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
         delta += delta / 2;
 
         if (delta > 1000) {
-            return alphaBeta(board, -MATE, MATE, depth, true);
+            return alphaBeta(board, -MATE, MATE, depth, true, Move::NO_MOVE);
         }
     }
 }
 
 static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
-int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull) {
+int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull, int prevMove) {
     // 1. Periodic Resource Check
     if ((localNodes & 1023) == 0) {
         checkTime();
@@ -271,7 +271,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
    
     if (doNull && !inCheck && hasBigPiece && depth > R) {
         BoardState undo = board.makeNullMove();
-        int score = -alphaBeta(board, -beta, -beta + 1, depth - R - 1, false);
+        int score = -alphaBeta(board, -beta, -beta + 1, depth - R - 1, false, Move::NO_MOVE);
         board.undoNullMove(undo);
         if (stopped) return 0;
         if (score >= beta) return beta;
@@ -280,7 +280,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     // 7. Move Generation & Sorting
     MoveList moves;
     MoveGen::pseudoLegalMoves(&board, side, moves, inCheck);
-    sortMoves(moves, board, pvMove, board.ply);
+    sortMoves(moves, board, pvMove, board.ply, prevMove);
 
     //@begin change
     // Root Move Randomization for Lazy SMP
@@ -366,7 +366,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
         if (legalMovesCount == 1) {
             // First Move (PV Move) gets a Full Window, Full Depth Search
-            score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+            score = -alphaBeta(board, -beta, -alpha, currentDepth, true, move);
         } else {
             int reduction = 0;
 
@@ -391,19 +391,19 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
             }
 
             // PVS Step 1: Null-Window Search (to prove the move is worse than alpha)
-            score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth - reduction, true);
+            score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth - reduction, true, move);
 
             // PVS Step 2: Re-search if the move unexpectedly beat alpha
             if (score > alpha) {
                 // If the move was reduced, we must re-verify it at full depth (still Null-Window)
                 if (reduction > 0) {
-                    score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth, true);
+                    score = -alphaBeta(board, -alpha - 1, -alpha, currentDepth, true, move);
                 }
 
                 // If it STILL beats alpha, AND is less than beta, it's a new Best Move! 
                 // We must re-search with the Full Window to get its exact evaluation.
                 if (score > alpha && score < beta) {
-                    score = -alphaBeta(board, -beta, -alpha, currentDepth, true);
+                    score = -alphaBeta(board, -beta, -alpha, currentDepth, true, move);
                 }
             }
         }
@@ -428,6 +428,11 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
                         board.searchKillers[1][board.ply] = board.searchKillers[0][board.ply];
                         board.searchKillers[0][board.ply] = move;
 
+                        // NEW: Update Countermove Table
+                        if (prevMove != Move::NO_MOVE) {
+                            counterMoveTable[Move::from(prevMove)][Move::to(prevMove)] = move;
+                        }
+
                         // 2. Calculate the bonus. Cap it to prevent runaway values.
                         int bonus = std::min(depth * depth, 400);
 
@@ -437,12 +442,13 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
 
                         // 4. PENALIZE all the quiet moves we searched before this one that FAILED
                         for (int j = 0; j < i; j++) {
-                            int prevMove = moves.get(j);
-                            int prevCap = Move::captured(prevMove);
-                            int prevProm = Move::promoteTo(prevMove);
-                            if (prevCap == Board::EMPTY && prevProm == Board::EMPTY && !Move::isEP(prevMove)) {
-                                int pPiece = board.board[Move::from(prevMove)];
-                                updateHistory(board.searchHistory[pPiece][Move::to(prevMove)], -bonus);
+                            int penalizedMove  = moves.get(j);
+                            int prevCap = Move::captured(penalizedMove);
+                            int prevProm = Move::promoteTo(penalizedMove);
+                            
+                            if (prevCap == Board::EMPTY && prevProm == Board::EMPTY && !Move::isEP(penalizedMove)) {
+                                int pPiece = board.board[Move::from(penalizedMove )];
+                                updateHistory(board.searchHistory[pPiece][Move::to(penalizedMove)], -bonus);
                             }
                         }
                     }
@@ -467,7 +473,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull)
     return bestScore;
 }
 
-int Search::scoreMove(const Board& board, int move, int pvMove) {
+int Search::scoreMove(const Board& board, int move, int pvMove, int prevMove) {
     if (move == pvMove) return 2000000;
 
     int promo = Move::promoteTo(move);
@@ -480,8 +486,24 @@ int Search::scoreMove(const Board& board, int move, int pvMove) {
     }
 
     int captured = Move::captured(move);
+
     if (captured != Board::EMPTY) {
         int attacker = board.board[Move::from(move)];
+        
+        // Get absolute piece values (assuming your PIECE_VALUES might be negative for Black)
+        int attackerVal = abs(Evaluation::PIECE_VALUES[attacker]);
+        int victimVal = abs(Evaluation::PIECE_VALUES[captured]);
+
+        // OPTIMIZATION: Only run the expensive SEE calculation if the capture looks "risky".
+        // A capture is risky if we are using a more valuable piece to take a less valuable piece.
+        bool isRisky = attackerVal > victimVal;
+
+        // If it's risky, test it. If it fails SEE, punish its score heavily.
+        if (isRisky && isBadCapture(board, move, board.state.currentPlayer)) {
+            return -1000000 + MVV_LVA[captured][attacker];
+        }
+        // If it's NOT risky (e.g. PxQ), OR if it IS risky but passed the SEE test (e.g. RxN but the N was hanging),
+        // we score it highly as a good capture.
         return 1000000 + MVV_LVA[captured][attacker];
     }
 
@@ -489,12 +511,17 @@ int Search::scoreMove(const Board& board, int move, int pvMove) {
     if (board.searchKillers[0][board.ply] == move) return 900000;
     if (board.searchKillers[1][board.ply] == move) return 800000;
 
+    // NEW: Countermove
+    if (prevMove != Move::NO_MOVE && counterMoveTable[Move::from(prevMove)][Move::to(prevMove)] == move) {
+        return 750000; // Scored just below killers, heavily above standard history
+    }
+
     // History heuristic
     return board.searchHistory[board.board[Move::from(move)]][Move::to(move)];
 }
 
 // TODO: pickNextBest, i.e., lazy sorting.
-void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply) {
+void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply, int prevMove) {
     int count = moves.size();
     
     // 1. Stack Allocation (Instant)
@@ -504,7 +531,7 @@ void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply)
 
     // 2. Score all moves
     for (int i = 0; i < count; ++i) {
-        scores[i] = scoreMove(board, moves.get(i), pvMove);
+        scores[i] = scoreMove(board, moves.get(i), pvMove, prevMove);
     }
 
     // 3. Selection Sort
@@ -594,7 +621,7 @@ int Search::quiescence(Board& board, int alpha, int beta) {
     }
 
     // 6. Score and Sort Moves
-    sortMoves(moves, board, Move::NO_MOVE, board.ply);
+    sortMoves(moves, board, Move::NO_MOVE, board.ply, Move::NO_MOVE);
 
     int legalMoves = 0;
 
