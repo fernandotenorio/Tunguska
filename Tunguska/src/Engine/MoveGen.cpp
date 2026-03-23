@@ -6,10 +6,9 @@
 
 int MoveGen::epCaptDiff[2] = {-8, 8};
 
-bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pinned){
+bool MoveGen::isLegalMove(Board* board, int move, int side, U64 pinned){
 	
 	if (Move::isCastle(move)){
-		assert(!atCheck);
 		return true;
 	}
 
@@ -20,34 +19,29 @@ bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pi
 
 	int from = Move::from(move);
 	int to = Move::to(move);
-	//capt not set for EP capture
 	int capt = Move::captured(move);
 
 	assert((capt != Board::WHITE_KING) || (capt != Board::BLACK_KING));
 
 	int movingPiece = board->board[from];
 	bool isEP = Move::isEP(move);
-	bool isPinned = (BitBoardGen::SQUARES[from] & pinned) != 0;
 	bool kingMoving = (movingPiece - side) == Board::KING;
+	bool isPinned = (BitBoardGen::SQUARES[from] & pinnedBB(board, side, board->kingSQ[side])) != 0;
 
-	//as duas linhas comentadas abaixo sao necessarias caso nao se use getEvasions,
-	//pois o rei pode mover para check
-
-	//if (!(isEP || isPinned || atCheck || kingMoving)){
-	if (!(isEP || isPinned || kingMoving)){
+	if (!kingMoving && !isEP && !isPinned){
 		return true;
 	}
 
-	//if (isPinned && !atCheck){
 	if (isPinned){
 		return (BitBoardGen::LINES_BB[from][to] & BitBoardGen::SQUARES[startKingSQ]) != 0;
 	}
 
-	U64 bb_bk[14];
-
-	//EP or King moving
-	for (int j = 0; j < 14; ++j)
-		bb_bk[j] = board->bitboards[j];
+	// backup original bitboards
+	U64 movingPieceBB = board->bitboards[movingPiece];
+	U64 sideBB = board->bitboards[side];
+	U64 oppPawnBB = board->bitboards[Board::PAWN | opp];
+	U64 oppBB = board->bitboards[opp];
+	U64 capturedBB = capt!=0 ? board->bitboards[capt] : 0;
 
 	//Update bitboards
 	board->bitboards[side] = BitBoardGen::zeroBit(board->bitboards[side], from);
@@ -72,16 +66,16 @@ bool MoveGen::isLegalMove(Board* board, int move, int side, bool atCheck, U64 pi
 	int kingSQ = (movingPiece == theKing) ? to : startKingSQ;
 	bool tmpCheck =	isSquareAttacked(board, kingSQ, opp);
 
-	board->bitboards[side] = bb_bk[side];
-	board->bitboards[movingPiece] = bb_bk[movingPiece];
+	board->bitboards[side] = sideBB;
+	board->bitboards[movingPiece] = movingPieceBB;
 
 	if (capt){
-		board->bitboards[capt] = bb_bk[capt];
-		board->bitboards[opp] = bb_bk[opp];
+		board->bitboards[capt] = capturedBB;
+		board->bitboards[opp] = oppBB;
 	}
 	else if (isEP){
-		board->bitboards[Board::PAWN | opp] = bb_bk[Board::PAWN | opp];
-		board->bitboards[opp] = bb_bk[opp];
+		board->bitboards[Board::PAWN | opp] = oppPawnBB;
+		board->bitboards[opp] = oppBB;
 	}
 	return !tmpCheck;
 }
@@ -134,18 +128,16 @@ void MoveGen::pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atC
 }
 
 void MoveGen::legalMoves(Board* board, int side, MoveList& valid, bool atCheck){
-
 	MoveList moves;
 	pseudoLegalMoves(board, side, moves, atCheck);
 	U64 pinned = pinnedBB(board, side, board->kingSQ[side]);
 	
 	for (int i = 0; i < moves.size(); i++){
-		if (isLegalMove(board, moves.get(i), side, atCheck, pinned)){
+		if (isLegalMove(board, moves.get(i), side, pinned)){
 			valid.add(moves.get(i));
 		}
 	}
 }
-
 
 bool MoveGen::can_castle_ks(Board* board, int side, U64 occup){
 	if (!board->state.can_castle_ks(side))

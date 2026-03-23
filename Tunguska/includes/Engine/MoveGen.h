@@ -17,7 +17,7 @@ class MoveGen{
 		static void legalMoves(Board* board, int side, MoveList& valid, bool atCheck);
 		static void pseudoLegalQuietMoves(Board* board, int side, MoveList& moves, bool atCheck);
 		static void pseudoLegalMoves(Board* board, int side, MoveList& moves, bool atCheck);
-		static bool isLegalMove(Board* board, int move, int side, bool atCheck, U64 pinned);
+		static bool isLegalMove(Board* board, int move, int side, U64 pinned);
 		static void pseudoLegalCaptureMoves(Board* board, int side, MoveList& capts);
 
 		static bool can_castle_ks(Board* board, int side, U64 occup);

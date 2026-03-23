@@ -174,7 +174,7 @@ bool HashTable::moveExists(Board& board, int move, int side){
     U64 pinned = MoveGen::pinnedBB(&board, side, ks);
 
     for (int i = 0; i < moves.size(); i++){
-        if (moves.get(i) == move && MoveGen::isLegalMove(&board, moves.get(i), side, atCheck, pinned)){
+        if (moves.get(i) == move && MoveGen::isLegalMove(&board, moves.get(i), side, pinned)){
             return true;
         }
     }
