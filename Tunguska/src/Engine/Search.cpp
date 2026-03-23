@@ -315,10 +315,12 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     int bestMove = Move::NO_MOVE;
 
     int extension = inCheck ? 1 : 0;
+    int counterMove = (prevMove != Move::NO_MOVE) ? counterMoveTable[Move::from(prevMove)][Move::to(prevMove)] : Move::NO_MOVE;
 
     // 8. Move Loop
     for (int i = 0; i < moves.size(); i++) {
         int move = moves.get(i);
+        bool isCounterMove = (move == counterMove);
 
         FeatureChanges changes = FeatureExtractor::moveDiffFeatures(board, move);
         BoardState undo = board.makeMove(move);
@@ -385,8 +387,12 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                 reduction = Search::LMRTable[lmrDepth][lmrMoves];
 
                 // Engine-specific LMR adjustments
-                if (isKiller) reduction--; 
+                if (isKiller || isCounterMove) reduction--; 
                 if (beta - alpha > 1) reduction--; // Reduce less in PV nodes
+
+                int piece = board.board[Move::from(move)];
+                int historyScore = board.searchHistory[piece][Move::to(move)];
+                reduction -= historyScore / 4096;
 
                 // Clamp reduction to safe bounds
                 reduction = std::max(0, reduction);
