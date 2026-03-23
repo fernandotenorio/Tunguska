@@ -242,9 +242,9 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     bool futility_prune = false;
     
     if (!inCheck) {
-        if (depth <= 5) {
-            staticEval = nnue_state.evaluate(side == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
-            
+        staticEval = nnue_state.evaluate(side == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
+
+        if (depth <= 5) {    
             // Reverse Futility Pruning (Static Null Move Pruning)
             if (abs(beta) < MATE - 100) {
                 int rfp_margin = 120 * depth; 
@@ -267,11 +267,15 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                         board.bitboards[Board::BISHOP | side] |
                         board.bitboards[Board::ROOK   | side] |
                         board.bitboards[Board::QUEEN  | side]) != 0ULL;
-    int R = 2 + depth/4;
-   
-    if (doNull && !inCheck && hasBigPiece && depth > R) {
+    
+    if (doNull && !inCheck && hasBigPiece && depth >= 3) {
+        int evalMargin = (staticEval - beta) / 200; 
+        evalMargin = std::max(0, std::min(2, evalMargin)); 
+        int R = 3 + (depth / 4) + evalMargin;
+        int nmpDepth = depth - R - 1;
+
         BoardState undo = board.makeNullMove();
-        int score = -alphaBeta(board, -beta, -beta + 1, depth - R - 1, false, Move::NO_MOVE);
+        int score = -alphaBeta(board, -beta, -beta + 1, nmpDepth, false, Move::NO_MOVE);
         board.undoNullMove(undo);
         if (stopped) return 0;
         if (score >= beta) return beta;
