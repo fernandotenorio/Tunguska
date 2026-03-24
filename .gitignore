@@ -35,16 +35,10 @@
 bin/
 data/
 raw_data/
-checkpoints*/
 torch/*
 !torch/*.py
 !torch/*.h
 !torch/*.cpp
-
-# cpp
-NNUE/*
-!NNUE/includes
-!NNUE/src
 
 .vs/
 

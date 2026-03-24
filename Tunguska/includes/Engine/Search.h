@@ -46,7 +46,6 @@ public:
     // --- NON-STATIC METHODS ---
     void historyStats(Board& board);
     int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool isMainThread);
-    int iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool isMainThread);
     int aspirationWindow(Board& board, int depth, int score);
 
 private:

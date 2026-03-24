@@ -143,33 +143,6 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
     return bestMove;
 }
 
-int Search::iterativeDeepeningScore(Board& board, int maxDepth, long long moveTime, bool isMainThread) {
-    nnue_state.init(board);
-
-    // 1. Thread-local nodes reset
-    localNodes = 0; 
-    
-    // 2. Thread-local best move
-    int bestMove = Move::NO_MOVE; 
-    int finalScore = INVALID_SCORE;
-    int score = 0;
-
-    for (int d = 1; d <= maxDepth; d++) { 
-        board.ply = 0;
-        score = aspirationWindow(board, d, score);
-
-        // 5. Use the static stopped flag
-        if (Search::stopped) break; 
-        finalScore = score;
-
-        if (score > MATE || score < -MATE) break;
-    }
-    
-    // Add this thread's nodes to the global counter
-    Search::totalNodes += localNodes;
-    return finalScore;
-}
-
 int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
     if (depth <= 3)
