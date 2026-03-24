@@ -30,7 +30,7 @@ except ImportError as e:
 class PerspectiveNNUE(nn.Module):
     def __init__(self):
         super(PerspectiveNNUE, self).__init__()
-        self.HL = 128
+        self.HL = 256
         self.ft = nn.Linear(768, self.HL)
         self.out = nn.Linear(2 * self.HL, 1)
 
