@@ -1187,6 +1187,12 @@
     <ClInclude Include="includes\NNUE\NNUEConstants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_256_e5.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_256_e10.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="perft.txt" />
