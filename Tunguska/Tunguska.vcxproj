@@ -570,6 +570,7 @@
     <ClInclude Include="includes\NNUE\nnue_weights.h" />
     <ClInclude Include="includes\NNUE\nnue_weights_256_e10.h" />
     <ClInclude Include="includes\NNUE\nnue_weights_256_e5.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_512_e20.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="perft.txt" />
