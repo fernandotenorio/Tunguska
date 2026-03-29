@@ -210,6 +210,11 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     int side = board.state.currentPlayer;
     bool inCheck = MoveGen::isSquareAttacked(&board, board.kingSQ[side], side ^ 1);
 
+    // --- Internal Iterative Reductions (IIR) ---
+    // if (depth >= 4 && pvMove == Move::NO_MOVE) {
+    //     depth-= 2;
+    // }
+
     // 5. Static Eval & Futility Pruning
     int staticEval = 0;
     bool futility_prune = false;
