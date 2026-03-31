@@ -250,6 +250,7 @@ void print_usage() {
               << "  ./converter plain <input.plain> <output.bin>\n";
 }
 
+/*
 int main(int argc, char* argv[]) {
     if (argc != 4) {
         print_usage();
@@ -286,3 +287,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+*/

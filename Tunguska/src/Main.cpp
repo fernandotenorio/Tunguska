@@ -16,15 +16,5 @@ int main() {
 	Search::init_search();
 	UCI::loop();
 	
-	// Board board = Board::fromFEN("2K5/2P1k3/1R2n3/2r5/8/8/8/8 w - - 1 1");
-	// MoveList moves;
-	// MoveGen::pseudoLegalMoves(&board, board.state.currentPlayer, moves, false);
-
-	// for (int i = 0; i < moves.size(); i++) {
-    //     bool exist = HashTable::moveExists(board, moves.get(i), board.state.currentPlayer);
-	// 	std::cout << Move::toLongNotation(moves.get(i)) << " " << (exist ? "ok": "invalid") << std::endl;
-		
-    // }
-	
 	return 0;
 }
