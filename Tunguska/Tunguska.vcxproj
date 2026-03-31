@@ -176,6 +176,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="fen_converter.cpp" />
     <ClCompile Include="src\Engine\BitBoardGen.cpp" />
     <ClCompile Include="src\Engine\Board.cpp" />
     <ClCompile Include="src\Engine\BoardState.cpp" />

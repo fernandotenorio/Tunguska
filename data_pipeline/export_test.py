@@ -370,5 +370,5 @@ if __name__ == "__main__":
     mix_and_split_bins(
         bin_files,
         "../data/train/mixed_train",
-        8
+        12
     )
