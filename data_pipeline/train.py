@@ -30,7 +30,7 @@ except ImportError as e:
 class PerspectiveNNUE(nn.Module):
     def __init__(self):
         super(PerspectiveNNUE, self).__init__()
-        self.HL = 512
+        self.HL = 1024
         self.ft = nn.Linear(768, self.HL)
         self.out = nn.Linear(2 * self.HL, 1)
 
@@ -366,6 +366,6 @@ if __name__ == "__main__":
 
     if len(chunk_files) > 0:
         # Tweak batch size if desired. 16384 or 32768 run blazingly fast with the C++ loader.
-        train(train_files, val_file, checkpoint_folder, epochs=20, batch_size=16384, lr=1e-3)
+        train(train_files, val_file, checkpoint_folder, epochs=30, batch_size=16384, lr=1e-3, resume_from="../checkpoints/nnue_epoch_23_COMPLETE.pt")
     else:
         print(f"No chunk files found!")

@@ -176,7 +176,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="fen_converter.cpp" />
     <ClCompile Include="src\Engine\BitBoardGen.cpp" />
     <ClCompile Include="src\Engine\Board.cpp" />
     <ClCompile Include="src\Engine\BoardState.cpp" />
@@ -191,6 +190,7 @@
     <ClCompile Include="src\Engine\StringUtils.cpp" />
     <ClCompile Include="src\Engine\UCI.cpp" />
     <ClCompile Include="src\Engine\Zobrist.cpp" />
+    <ClCompile Include="src\fen_converter.cpp" />
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\NNUE\FeatureExtractor.cpp" />
     <ClCompile Include="src\NNUE\nnue_loader.cpp" />
@@ -569,6 +569,12 @@
     <ClInclude Include="includes\NNUE\NNUEConstants.h" />
     <ClInclude Include="includes\NNUE\nnue_loader.h" />
     <ClInclude Include="includes\NNUE\nnue_weights.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e1.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e10.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e23.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e3.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e30.h" />
+    <ClInclude Include="includes\NNUE\nnue_weights_128_e10.h" />
     <ClInclude Include="includes\NNUE\nnue_weights_256_e10.h" />
     <ClInclude Include="includes\NNUE\nnue_weights_256_e5.h" />
     <ClInclude Include="includes\NNUE\nnue_weights_512_e20.h" />

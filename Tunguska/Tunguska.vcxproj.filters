@@ -66,7 +66,7 @@
     <ClCompile Include="src\NNUE\nnue_loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="fen_converter.cpp">
+    <ClCompile Include="src\fen_converter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -1197,6 +1197,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\NNUE\nnue_weights_512_e20.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e23.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_128_e10.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e10.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\nnue_weights_1024_e30.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
