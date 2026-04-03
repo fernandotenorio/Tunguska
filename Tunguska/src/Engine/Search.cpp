@@ -9,8 +9,7 @@
 #include "NNUE/FeatureExtractor.h"
 
 std::atomic<bool> Search::stopped{false};
-long long Search::timeLimit = -1;
-long long Search::startTime = 0;
+TimeManager Search::timeManager;
 std::atomic<long> Search::totalNodes{0};
 
 void Search::stop() {
@@ -18,16 +17,14 @@ void Search::stop() {
 }
 
 // Helper to get current time in milliseconds
-long long Search::currentTimeMillis() {
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
+// long long Search::currentTimeMillis() {
+//     using namespace std::chrono;
+//     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+// }
 
 void Search::checkTime() {
-    if (timeLimit != -1) {
-        if (currentTimeMillis() - startTime >= timeLimit) {
-            stopped = true;
-        }
+    if (timeManager.checkHardLimit()) {
+        stopped = true;
     }
 }
 
@@ -84,11 +81,12 @@ void Search::historyStats(Board& board){
           << " nonzero=" << countHist << std::endl;
 }
 
-int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool isMainThread) {
+int Search::iterativeDeepening(Board& board, int maxDepth, bool isMainThread) {
     nnue_state.init(board);
 
     localNodes = 0;
     int bestMove = Move::NO_MOVE;
+    int previousBestMove = Move::NO_MOVE;
     int score = 0;
     int pvCount = 0;
 
@@ -102,10 +100,19 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
 
         pvCount = HashTable::getPVLine(d, board);
 
+        // Move instability detection (Extends Soft Limit if best move changes)
+        if (pvCount > 0) {
+            if (isMainThread && d > 4 && board.pvArray[0] != previousBestMove && previousBestMove != Move::NO_MOVE) {
+                Search::timeManager.extendTime();
+            }
+            previousBestMove = board.pvArray[0];
+            bestMove = board.pvArray[0];
+        }
+
         // ONLY print to the console if this is the main thread!
         if (isMainThread) {
             std::cout << "info depth " << d << " score cp " << score << " nodes " << Search::totalNodes
-                << " time " << (currentTimeMillis() - Search::startTime) << " pv ";
+                << " time " << Search::timeManager.elapsed() << " pv ";
 
             for (int i = 0; i < pvCount; i++) {
                 std::cout << Move::toLongNotation(board.pvArray[i]) << " ";
@@ -113,10 +120,14 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
             std::cout << std::endl;
         }
         
-        if (pvCount > 0) {
-            bestMove = board.pvArray[0];
-        }
         if (score > MATE || score < -MATE) break;
+
+        // Check soft limit after a fully completed depth. 
+        // Only trigger this for the main thread so that threads exit gracefully across the SMP pool.
+        if (isMainThread && Search::timeManager.checkSoftLimit()) {
+            Search::stop();
+            break;
+        }
     }
 
     Search::totalNodes += localNodes;
@@ -139,7 +150,6 @@ int Search::iterativeDeepening(Board& board, int maxDepth, long long moveTime, b
         Search::stop();
         std::cout << "bestmove " << Move::toLongNotation(bestMove) << std::endl;
     }
-
     return bestMove;
 }
 

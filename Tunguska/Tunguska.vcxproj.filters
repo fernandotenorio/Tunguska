@@ -1217,6 +1217,9 @@
     <ClInclude Include="includes\NNUE\nnue_weights_1024_e30.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\Engine\TimeManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="perft.txt" />

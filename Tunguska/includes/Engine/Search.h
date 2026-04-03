@@ -6,6 +6,7 @@
 #include <chrono>
 #include <atomic>
 #include "NNUE/nnue_loader.h"
+#include "Engine/TimeManager.h"
 
 class Search {
 public:
@@ -15,8 +16,7 @@ public:
 
     // Shared global controls
     static std::atomic<bool> stopped;
-    static long long timeLimit;
-    static long long startTime;
+    static TimeManager timeManager;
     static std::atomic<long> totalNodes; // To accumulate nodes from all threads
 
     // Read-only shared tables
@@ -26,7 +26,7 @@ public:
 
     static void init_search();
     static void stop();
-    static long long currentTimeMillis();
+    //static long long currentTimeMillis();
 
     // --- INSTANCE VARIABLES (Per-Thread) ---
     int threadId;
@@ -45,7 +45,7 @@ public:
 
     // --- NON-STATIC METHODS ---
     void historyStats(Board& board);
-    int iterativeDeepening(Board& board, int maxDepth, long long moveTime, bool isMainThread);
+    int iterativeDeepening(Board& board, int maxDepth, bool isMainThread);
     int aspirationWindow(Board& board, int depth, int score);
 
 private:

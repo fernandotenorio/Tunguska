@@ -563,6 +563,7 @@
     <ClInclude Include="includes\Engine\Perft.h" />
     <ClInclude Include="includes\Engine\Search.h" />
     <ClInclude Include="includes\Engine\StringUtils.h" />
+    <ClInclude Include="includes\Engine\TimeManager.h" />
     <ClInclude Include="includes\Engine\UCI.h" />
     <ClInclude Include="includes\Engine\Zobrist.h" />
     <ClInclude Include="includes\NNUE\FeatureExtractor.h" />

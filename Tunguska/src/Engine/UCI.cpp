@@ -181,7 +181,7 @@ void UCI::parseGo(std::string line, Board& board) {
     int depth = Board::MAX_DEPTH; 
     long long movetime = -1;      
 
-    // New variables for time control parsing
+    // time control parsing
     long long wtime = 0, btime = 0;
     long long winc = 0, binc = 0;
     int movestogo = 0;
@@ -201,37 +201,11 @@ void UCI::parseGo(std::string line, Board& board) {
         else if (token == "infinite") infinite = true;
     }
 
-    // --- Time Management ---
-    if (infinite) {
-        // -1 acts as infinity; the search will run until a "stop" command is sent
-        movetime = -1; 
-    } else if (movetime == -1) {
-        // Only calculate time if an explicit "movetime" wasn't provided
-        bool isWhite = board.state.currentPlayer == Board::WHITE;
-        long long timeLeft = isWhite ? wtime : btime;
-        long long inc = isWhite ? winc : binc;
-
-        if (timeLeft > 0) {
-            if (movestogo > 0) {
-                // If we know moves to go, allocate a fraction of remaining time + increment
-                movetime = timeLeft / movestogo + inc;
-            } else {
-                // Sudden death time control: assume roughly 40 moves left on average
-                movetime = timeLeft / 40 + inc;
-            }
-            
-            // Only apply a strict overhead subtraction if the calculated
-            // movetime is dangerously close to our total time left.
-            // This guarantees we don't flag, but doesn't artificially limit
-            // search time when we have plenty of time on the clock.
-            int moveOverhead = 10;
-            if (movetime >= timeLeft - moveOverhead) {
-                movetime = std::max((long long)1, timeLeft - moveOverhead);
-            }
-        }
+    if (wtime == 0 && btime == 0 && movetime == -1) {
+        infinite = true;
     }
 
-     // --- stop previous search ---
+    // --- stop previous search ---
     Search::stop();
     for (auto& t : workers) {
         if (t.joinable())
@@ -242,19 +216,19 @@ void UCI::parseGo(std::string line, Board& board) {
 
     // Reset global shared states before launching workers
     Search::stopped = false;
-    Search::startTime = Search::currentTimeMillis();
-    Search::timeLimit = movetime;
+    Search::timeManager.init(wtime, btime, winc, binc, movestogo, board.state.currentPlayer == Board::WHITE, movetime, infinite);
+    Search::timeManager.start();
     Search::totalNodes = 0;
 
     for (int i = 0; i < num_threads; ++i) {
-        workers.emplace_back([board, depth, movetime, i]() mutable {
+        workers.emplace_back([board, depth, i]() mutable {
             // Give the main thread (0) a tiny head start to populate TT
             if (i > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(i * 5));
             }
             Search searcher(i);
             bool isMain = (i == 0);
-            searcher.iterativeDeepening(board, depth, movetime, isMain);
+            searcher.iterativeDeepening(board, depth, isMain);
         });
     }
 }
