@@ -6,14 +6,14 @@ Tunguska is a UCI-compliant chess engine written in C++. It uses a bitboard repr
 -   **Search**: Iterative Deepening PVS
 -   **Memory**: Zobrist Hashing & Transposition Table
 -   **Evaluation**: NNUE
--   **Pruning**: Null Move, LMR, Futility, SEE
+-   **Pruning**: Null Move, LMP, LMR, Futility, SEE
 -   **Move Ordering**: MVV-LVA, Killers, History Heuristic
 -   **Concurrency**: Lazy SMP with Lock-Free TT
 
 ## Evaluation (NNUE)
-Tunguska's positional evaluation is handled by an NNUE network. The network weights were trained on a dataset of approximately 600 million FEN positions.
+Tunguska's positional evaluation is handled by an NNUE network. The network weights were trained on a dataset of approximately 1 billion FEN positions.
 
--   **Architecture**: `(768 -> 128) x 2 -> 1`
+-   **Architecture**: `(768 -> 1024) x 2 -> 1`
     -   Input: A simple `piece-square-color` representation of size 6 x 64 x 2 = 768.
     -   Hidden Layer: A single layer with 128 neurons and Clipped ReLU activation, with separate accumulators for each player's perspective.
     -   Output: A single neuron producing the evaluation score.
