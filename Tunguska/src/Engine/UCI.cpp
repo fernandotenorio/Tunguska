@@ -1,6 +1,5 @@
 #include "Engine/UCI.h"
 #include "Engine/Search.h"
-#include "Engine/Evaluation.h"
 #include "Engine/Perft.h"
 #include <iostream>
 #include <sstream>
@@ -9,7 +8,6 @@ std::vector<std::thread> UCI::workers;
 int num_threads = 1;
 
 void UCI::loop() {
-    Evaluation::initAll();
     Board board = Board::fromStartPosition();
     HashTable* tt = new HashTable();
     board.setHashTable(tt);
@@ -58,9 +56,6 @@ void UCI::loop() {
                 if (t.joinable())
                     t.join();
             }
-        }
-        else if (line.find("evaltest") == 0) {
-            Evaluation::testEval("positions.fen");
         }
         else if (line.find("perft") == 0) {
             Perft::runAll("perft.txt");
