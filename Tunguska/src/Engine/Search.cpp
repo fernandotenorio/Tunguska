@@ -317,8 +317,6 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
             continue;
         }
 
-        nnue_state.update(changes);
-
         legalMovesCount++;
         int captured = Move::captured(move);
         int promoted = Move::promoteTo(move);
@@ -337,7 +335,6 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                     move != board.searchKillers[0][board.ply] && 
                     move != board.searchKillers[1][board.ply]) {
                     
-                    nnue_state.updateUndo(changes);
                     board.undoMove(move, undo);
                     continue; // Skip this move!
                 }
@@ -350,10 +347,13 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
             move != board.searchKillers[0][board.ply] && 
             move != board.searchKillers[1][board.ply]) {
             
-            nnue_state.updateUndo(changes);
             board.undoMove(move, undo);
             continue;
         }
+
+        // The child accumulator is only needed if the move is actually searched.
+        // LMP and futility-pruned moves avoid both the update and its inverse.
+        nnue_state.update(changes);
 
         // --- PVS & LMR LOGIC START ---
         int currentDepth = depth - 1 + extension;
