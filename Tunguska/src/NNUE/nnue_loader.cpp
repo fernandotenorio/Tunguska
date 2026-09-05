@@ -52,64 +52,97 @@ void NNUEState::init(const Board& board) {
     }
 }
 
-void NNUEState::update(const FeatureChanges& changes) {
-    // --- WHITE ACCUMULATOR ---
-    for (int i = 0; i < changes.rem_white_count; ++i) {
-        int feat = changes.rem_white[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[WHITE_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] -= w[j]; }
-    }
-    for (int i = 0; i < changes.add_white_count; ++i) {
-        int feat = changes.add_white[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[WHITE_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] += w[j]; }
-    }
+namespace {
 
-    // --- BLACK ACCUMULATOR ---
-    for (int i = 0; i < changes.rem_black_count; ++i) {
-        int feat = changes.rem_black[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[BLACK_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] -= w[j]; }
-    }
-    for (int i = 0; i < changes.add_black_count; ++i) {
-        int feat = changes.add_black[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[BLACK_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] += w[j]; }
+// Counts and direction are compile-time constants in the common move kernels.
+template<bool Undo, int Removed, int Added>
+void updateFused(int16_t* accumulator, const int* removed, const int* added) {
+    const int16_t* remWeights[Removed];
+    const int16_t* addWeights[Added];
+    for (int i = 0; i < Removed; ++i)
+        remWeights[i] = NNUENetwork::accumulator_weight[removed[i]];
+    for (int i = 0; i < Added; ++i)
+        addWeights[i] = NNUENetwork::accumulator_weight[added[i]];
+
+    for (int j = 0; j < HL_SIZE; j += 16) {
+        __m256i value = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + j));
+        for (int i = 0; i < Removed; ++i) {
+            const __m256i weight = _mm256_load_si256(reinterpret_cast<const __m256i*>(remWeights[i] + j));
+            if constexpr (Undo)
+                value = _mm256_add_epi16(value, weight);
+            else
+                value = _mm256_sub_epi16(value, weight);
+        }
+        for (int i = 0; i < Added; ++i) {
+            const __m256i weight = _mm256_load_si256(reinterpret_cast<const __m256i*>(addWeights[i] + j));
+            if constexpr (Undo)
+                value = _mm256_sub_epi16(value, weight);
+            else
+                value = _mm256_add_epi16(value, weight);
+        }
+        _mm256_store_si256(reinterpret_cast<__m256i*>(accumulator + j), value);
     }
 }
 
-void NNUEState::updateUndo(const FeatureChanges& changes) {
-    // --- WHITE ACCUMULATOR ---
-    for (int i = 0; i < changes.rem_white_count; ++i) {
-        int feat = changes.rem_white[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[WHITE_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] += w[j]; }
-    }
-    for (int i = 0; i < changes.add_white_count; ++i) {
-        int feat = changes.add_white[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[WHITE_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] -= w[j]; }
-    }
+template<bool Undo>
+void updatePerspective(int16_t* accumulator, const int* removed, int removedCount,
+                       const int* added, int addedCount) {
+    static_assert(HL_SIZE % 16 == 0, "AVX2 updates require complete 16-lane vectors");
 
-    // --- BLACK ACCUMULATOR ---
-    for (int i = 0; i < changes.rem_black_count; ++i) {
-        int feat = changes.rem_black[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[BLACK_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] += w[j]; }
+    if (removedCount == 1 && addedCount == 1) {
+        // Quiet moves, pawn jumps, and non-capturing promotions.
+        updateFused<Undo, 1, 1>(accumulator, removed, added);
+    } else if (removedCount == 2 && addedCount == 1) {
+        // Captures, en passant, and capturing promotions.
+        updateFused<Undo, 2, 1>(accumulator, removed, added);
+    } else if (removedCount == 2 && addedCount == 2) {
+        // Castling.
+        updateFused<Undo, 2, 2>(accumulator, removed, added);
+    } else {
+        // Preserve support for any other FeatureChanges shape, including empty.
+        if (removedCount == 0 && addedCount == 0) return;
+        const int16_t* remWeights[4];
+        const int16_t* addWeights[4];
+        for (int i = 0; i < removedCount; ++i)
+            remWeights[i] = NNUENetwork::accumulator_weight[removed[i]];
+        for (int i = 0; i < addedCount; ++i)
+            addWeights[i] = NNUENetwork::accumulator_weight[added[i]];
+
+        for (int j = 0; j < HL_SIZE; j += 16) {
+            __m256i value = _mm256_load_si256(reinterpret_cast<const __m256i*>(accumulator + j));
+            for (int i = 0; i < removedCount; ++i) {
+                const __m256i weight = _mm256_load_si256(reinterpret_cast<const __m256i*>(remWeights[i] + j));
+                if constexpr (Undo)
+                    value = _mm256_add_epi16(value, weight);
+                else
+                    value = _mm256_sub_epi16(value, weight);
+            }
+            for (int i = 0; i < addedCount; ++i) {
+                const __m256i weight = _mm256_load_si256(reinterpret_cast<const __m256i*>(addWeights[i] + j));
+                if constexpr (Undo)
+                    value = _mm256_sub_epi16(value, weight);
+                else
+                    value = _mm256_add_epi16(value, weight);
+            }
+            _mm256_store_si256(reinterpret_cast<__m256i*>(accumulator + j), value);
+        }
     }
-    for (int i = 0; i < changes.add_black_count; ++i) {
-        int feat = changes.add_black[i];
-        const int16_t* w = NNUENetwork::accumulator_weight[feat];
-        int16_t* a = accumulator.v[BLACK_NNUE];
-        for (int j = 0; j < HL_SIZE; ++j) { a[j] -= w[j]; }
-    }
+}
+
+} // namespace
+
+void NNUEState::update(const FeatureChanges& changes) {
+    updatePerspective<false>(accumulator.v[WHITE_NNUE], changes.rem_white, changes.rem_white_count,
+                             changes.add_white, changes.add_white_count);
+    updatePerspective<false>(accumulator.v[BLACK_NNUE], changes.rem_black, changes.rem_black_count,
+                             changes.add_black, changes.add_black_count);
+}
+
+void NNUEState::updateUndo(const FeatureChanges& changes) {
+    updatePerspective<true>(accumulator.v[WHITE_NNUE], changes.rem_white, changes.rem_white_count,
+                            changes.add_white, changes.add_white_count);
+    updatePerspective<true>(accumulator.v[BLACK_NNUE], changes.rem_black, changes.rem_black_count,
+                            changes.add_black, changes.add_black_count);
 }
 
 int NNUEState::evaluate(Side stm) {
