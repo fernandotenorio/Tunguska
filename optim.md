@@ -4,7 +4,7 @@ Reviewed 2026-09-05. Ranked by expected potential to improve playing strength th
 
 Scope: engine code in `Tunguska/includes/Engine`, `Tunguska/includes/NNUE`, and `Tunguska/src`, plus the Visual Studio build settings and supplied executable. No `data_pipeline` code or NNUE weight headers were read. Search-policy fixes, network changes, and UCI compliance are outside this review. Locations below use the current source's line numbers or function names.
 
-## 1. Fuse the NNUE feature updates into one pass per perspective
+## 1. Fuse the NNUE feature updates into one pass per perspective (Done)
 
 **Potential: high. Effort: small to medium. Preserves search and evaluation.**
 
@@ -38,7 +38,7 @@ Next, record feature deltas and a computed/dirty marker, materializing only when
 
 Implement direct child construction first and lazy materialization separately. Bitwise compare against full feature reconstruction through random legal sequences and complete undo sequences. Measure update counts and evaluated nodes as well as time.
 
-## 3. Move NNUE updates below the existing move-pruning tests
+## 3. Move NNUE updates below the existing move-pruning tests (Done)
 
 **Potential: medium to high. Effort: small. Best early low-risk patch.**
 
