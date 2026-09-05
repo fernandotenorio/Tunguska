@@ -1,0 +1,4 @@
+positions.fen
+data/
+nnue_weights_*.h
+perft.txt
