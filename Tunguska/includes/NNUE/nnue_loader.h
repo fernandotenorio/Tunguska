@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cassert>
+#include <memory>
 #include "NNUE/NNUEConstants.h"
 
 class Board;
@@ -29,13 +31,25 @@ public:
 };
 
 class NNUEState {
+private:
+    // Heap-backed once per search thread; no allocation in update/pop.
+    std::unique_ptr<NNUEAccumulator[]> accumulators;
+    int accumulatorIndex = 0;
+
 public:
-    NNUEAccumulator accumulator;
-    NNUEState() = default;
+    NNUEState();
 
     void init(const Board& board);
+    // Push a fully computed child. Null moves share the current accumulator
+    // and do not push/pop: the index counts real moves, not board.ply.
     void update(const FeatureChanges& changes);
-    void updateUndo(const FeatureChanges& changes);
+    void pop() {
+        assert(accumulatorIndex > 0);
+        --accumulatorIndex;
+    }
+    const NNUEAccumulator& currentAccumulator() const {
+        return accumulators[accumulatorIndex];
+    }
     int evaluate(Side stm);
 };
 

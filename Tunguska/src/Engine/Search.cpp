@@ -263,6 +263,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
         int nmpDepth = depth - R - 1;
 
         BoardState undo = board.makeNullMove();
+        // Null moves change only the evaluation perspective, not NNUE features.
+        // Keep sharing the current accumulator; real descendants push/pop normally.
         int score = -alphaBeta(board, -beta, -beta + 1, nmpDepth, false, Move::NO_MOVE);
         board.undoNullMove(undo);
         if (stopped) return 0;
@@ -360,7 +362,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
         }
 
         // The child accumulator is only needed if the move is actually searched.
-        // LMP and futility-pruned moves avoid both the update and its inverse.
+        // LMP and futility-pruned moves do not push an accumulator stack entry.
         nnue_state.update(changes);
 
         // --- PVS & LMR LOGIC START ---
@@ -415,7 +417,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
         }
         // --- PVS & LMR LOGIC END ---
 
-        nnue_state.updateUndo(changes);
+        nnue_state.pop();
         board.undoMove(move, undo);
 
         if (stopped) return 0;
@@ -662,7 +664,7 @@ int Search::quiescence(Board& board, int alpha, int beta) {
         legalMoves++;
         int score = -quiescence(board, -beta, -alpha);
 
-        nnue_state.updateUndo(changes);
+        nnue_state.pop();
         board.undoMove(move, undo);
 
         if (stopped) return 0;
