@@ -70,7 +70,7 @@ Compile the increments out of production builds, or collect diagnostics per thre
 
 Do not remove atomics from actual TT entries. Their synchronization/checksum scheme is separate from these dispensable statistics. Compare at 1, 2, 4, and the intended tournament thread count; SMP tree differences prevent expecting identical node counts there.
 
-## 6. Reuse SEE results between move scoring and quiescence pruning
+## 6. Reuse SEE results between move scoring and quiescence pruning (Done, regression not merged)
 
 **Potential: medium. Effort: small to medium.**
 
