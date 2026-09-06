@@ -80,7 +80,7 @@ Store a per-move tri-state result alongside the score: unknown, negative, or non
 
 An inexpensive-looking capture was not evaluated by SEE during scoring, so its high move score is not sufficient evidence to skip the later SEE call. EP and promotion exemptions must remain exactly as today. Do not replace quiescence's SEE with the risky-capture shortcut: that would change pruning.
 
-## 7. Remove duplicated slider calculations inside SEE
+## 7. Remove duplicated slider calculations inside SEE (Done, apparent regression not merged)
 
 **Potential: medium. Effort: small to medium.**
 
