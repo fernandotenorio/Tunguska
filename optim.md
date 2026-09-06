@@ -24,7 +24,7 @@ The supplied executable **already auto-vectorizes** the current update loops: di
 
 For a quiet move plus undo, nominal array traffic falls from 48 KiB to 32 KiB: count accumulator reads, weight reads, and accumulator writes for both perspectives. This is instruction-level traffic, largely served by caches, **not** a claim of equivalent DRAM traffic or a 33% engine speedup. Validate every accumulator lane and the final evaluation, including promotions, en passant, and castling. Preserve wrapping arithmetic; do not introduce saturation.
 
-## 2. Keep accumulators by ply; eliminate inverse updates, then materialize lazily
+## 2. Keep accumulators by ply; eliminate inverse updates, then materialize lazily (Done: pt1, pt2 regression not merged)
 
 **Potential: high, but overlaps #1 and #3. Effort: medium. Preserves search with careful state handling.**
 
@@ -60,7 +60,7 @@ Preserve the strict `>` comparison, first-maximum choice, and swap behavior. Sel
 
 Workers currently rotate the fully sorted root prefix. The simplest exact implementation retains eager sorting at worker roots while using lazy selection elsewhere. A later implementation can materialize the required sorted prefix before applying the same rotation. Compare emitted move sequences, including tied scores, and fixed-depth single-thread nodes/PVs.
 
-## 5. Remove shared atomic TT diagnostic counters from the search hot path (Not merged)
+## 5. Remove shared atomic TT diagnostic counters from the search hot path (Done, not merged)
 
 **Potential: medium on one thread, potentially high on many threads. Effort: very small.**
 
