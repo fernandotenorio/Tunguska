@@ -41,7 +41,7 @@ void Search::init_search() {
     };
     for (int v = 2; v < 14; v++) {
         for (int a = 2; a < 14; a++) {
-            MVV_LVA[v][a] = values[v] + 10 - (values[a] / 100);
+            MVV_LVA[v][a] = values[v] + 10 - (values[a] / Tune::MVVAttackerDivisor);
         }
     }
 
@@ -49,7 +49,7 @@ void Search::init_search() {
         for (int m = 0; m < 257; m++) {
             if (d > 0 && m > 0) {
                 // Standard Stockfish-like logarithmic formula
-                LMRTable[d][m] = static_cast<int>(0.75 + std::log(d) * std::log(m) / 2.25);
+                LMRTable[d][m] = static_cast<int>(Tune::LMRBase / 100.0 + std::log(d) * std::log(m) / (Tune::LMRDivisor / 100.0));
             } else {
                 LMRTable[d][m] = 0;
             }
@@ -102,7 +102,7 @@ int Search::iterativeDeepening(Board& board, int maxDepth, bool isMainThread) {
 
         // Move instability detection (Extends Soft Limit if best move changes)
         if (pvCount > 0) {
-            if (isMainThread && d > 4 && board.pvArray[0] != previousBestMove && previousBestMove != Move::NO_MOVE) {
+            if (isMainThread && d > Tune::TimeInstabilityDepth && board.pvArray[0] != previousBestMove && previousBestMove != Move::NO_MOVE) {
                 Search::timeManager.extendTime();
             }
             previousBestMove = board.pvArray[0];
@@ -155,10 +155,10 @@ int Search::iterativeDeepening(Board& board, int maxDepth, bool isMainThread) {
 
 int Search::aspirationWindow(Board& board, int depth, int prevScore) {
 
-    if (depth <= 3)
+    if (depth <= Tune::AspirationDepth)
         return alphaBeta(board, -MATE, MATE, depth, true, Move::NO_MOVE);
 
-    int delta = 15;
+    int delta = Tune::AspirationDelta;
     int alpha = std::max(-MATE, prevScore - delta);
     int beta  = std::min(MATE, prevScore + delta);
 
@@ -179,15 +179,27 @@ int Search::aspirationWindow(Board& board, int depth, int prevScore) {
             return score;
         }
 
-        delta += delta / 2;
+        delta += delta / Tune::AspirationGrowthDivisor;
 
-        if (delta > 1000) {
+        if (delta > Tune::AspirationFallback) {
             return alphaBeta(board, -MATE, MATE, depth, true, Move::NO_MOVE);
         }
     }
 }
 
-static const int FUTIL_MARGIN[4] = {0, 200, 300, 450};
+static int futilityMargin(int depth) {
+#ifndef TUNGUSKA_SPSA
+    static constexpr int margins[4] = {0, Tune::FutilityMargin1, Tune::FutilityMargin2, Tune::FutilityMargin3};
+    return margins[depth];
+#else
+    // Depth is constrained to 1..3 by FutilityDepth and the qsearch guard.
+    switch (depth) {
+    case 1: return Tune::FutilityMargin1;
+    case 2: return Tune::FutilityMargin2;
+    default: return Tune::FutilityMargin3;
+    }
+#endif
+}
 int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull, int prevMove) {
     // 1. Periodic Resource Check
     if ((localNodes & 1023) == 0) {
@@ -218,8 +230,8 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     }
 
     // --- Internal Iterative Reductions (IIR) ---
-    if (depth >= 4 && pvMove == Move::NO_MOVE) {
-        depth-= 1;
+    if (depth >= Tune::IIRDepth && pvMove == Move::NO_MOVE) {
+        depth-= Tune::IIRReduction;
     }
 
     int side = board.state.currentPlayer;
@@ -232,18 +244,18 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     if (!inCheck) {
         staticEval = nnue_state.evaluate(side == Board::WHITE ? WHITE_NNUE : BLACK_NNUE);
 
-        if (depth <= 5) {    
+        if (depth <= Tune::RFPDepth) {
             // Reverse Futility Pruning (Static Null Move Pruning)
             if (abs(beta) < MATE - 100) {
-                int rfp_margin = 120 * depth; 
+                int rfp_margin = Tune::RFPMargin * depth;
                 if (staticEval - rfp_margin >= beta) {
                     return staticEval - rfp_margin; 
                 }
             }
             
             // Standard Futility Pruning setup
-            if (depth <= 3 && abs(alpha) < MATE - 100) {
-                if (staticEval + FUTIL_MARGIN[depth] <= alpha) {
+            if (depth <= Tune::FutilityDepth && abs(alpha) < MATE - 100) {
+                if (staticEval + futilityMargin(depth) <= alpha) {
                     futility_prune = true;
                 }
             }
@@ -256,10 +268,10 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                         board.bitboards[Board::ROOK   | side] |
                         board.bitboards[Board::QUEEN  | side]) != 0ULL;
     
-    if (doNull && !inCheck && hasBigPiece && depth >= 3) {
-        int evalMargin = (staticEval - beta) / 200; 
-        evalMargin = std::max(0, std::min(2, evalMargin)); 
-        int R = 3 + (depth / 4) + evalMargin;
+    if (doNull && !inCheck && hasBigPiece && depth >= Tune::NullMinDepth) {
+        int evalMargin = (staticEval - beta) / Tune::NullEvalDivisor;
+        evalMargin = std::max(0, std::min(Tune::NullEvalCap, evalMargin));
+        int R = Tune::NullBase + (depth / Tune::NullDepthDivisor) + evalMargin;
         int nmpDepth = depth - R - 1;
 
         BoardState undo = board.makeNullMove();
@@ -311,7 +323,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
     int bestScore = -INFINITE;
     int bestMove = Move::NO_MOVE;
 
-    int extension = inCheck ? 1 : 0;
+    int extension = inCheck ? Tune::CheckExtension : 0;
     int counterMove = (prevMove != Move::NO_MOVE) ? counterMoveTable[Move::from(prevMove)][Move::to(prevMove)] : Move::NO_MOVE;
 
     // 8. Move Loop
@@ -335,9 +347,9 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
 
         // --- LATE MOVE PRUNING (LMP) ---
         // If we are at a low depth, not in check, and have already searched enough moves...
-        if (depth <= 4 && !inCheck && isQuiet) {
+        if (depth <= Tune::LMPDepth && !inCheck && isQuiet) {
             // Formula: Allow more moves at higher depths (e.g., depth 1 = 5 moves, depth 2 = 11 moves)
-            int lmpThreshold = 3 + 4 * depth * depth;
+            int lmpThreshold = Tune::LMPBase + Tune::LMPQuadratic * depth * depth;
             
             if (legalMovesCount > lmpThreshold) {
                 // Don't prune killers or PV moves!
@@ -375,7 +387,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
             int reduction = 0;
 
             // Calculate Table-based Late Move Reduction
-            if (depth >= 3 && legalMovesCount > 3 && isQuiet && !inCheck) {
+            if (depth >= Tune::LMRDepth && legalMovesCount > Tune::LMRMoves && isQuiet && !inCheck) {
                 bool isKiller = (move == board.searchKillers[0][board.ply] || 
                                  move == board.searchKillers[1][board.ply]);
                 
@@ -385,12 +397,12 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                 reduction = Search::LMRTable[lmrDepth][lmrMoves];
 
                 // Engine-specific LMR adjustments
-                if (isKiller || isCounterMove) reduction--; 
-                if (beta - alpha > 1) reduction--; // Reduce less in PV nodes
+                if (isKiller || isCounterMove) reduction -= Tune::LMRKillerAdjustment;
+                if (beta - alpha > 1) reduction -= Tune::LMRPVAdjustment;
 
                 int piece = board.board[Move::from(move)];
                 int historyScore = board.searchHistory[piece][Move::to(move)];
-                reduction -= historyScore / 4096;
+                reduction -= historyScore / Tune::LMRHistoryDivisor;
 
                 // Clamp reduction to safe bounds
                 reduction = std::max(0, reduction);
@@ -442,7 +454,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
                         }
 
                         // 2. Calculate the bonus. Cap it to prevent runaway values.
-                        int bonus = std::min(depth * depth, 400);
+                        int bonus = std::min(depth * depth, Tune::HistoryBonusCap);
 
                         // 3. REWARD the move that caused the cutoff
                         int piece = board.board[Move::from(move)];
@@ -635,7 +647,7 @@ int Search::quiescence(Board& board, int alpha, int beta) {
 
             // Delta Pruning
             if (promote == Board::EMPTY) {
-                int delta = abs(capturedValue) + 200;
+                int delta = abs(capturedValue) + Tune::QDeltaMargin;
                 if (standPat + delta < alpha) continue;
             }
 

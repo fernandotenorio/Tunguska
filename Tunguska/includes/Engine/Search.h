@@ -7,6 +7,7 @@
 #include <atomic>
 #include "NNUE/nnue_loader.h"
 #include "Engine/TimeManager.h"
+#include "../../../spsa/engine/parameters.h"
 
 class Search {
 public:
@@ -61,7 +62,7 @@ private:
 
     inline void updateHistory(int& currentHistory, int bonus) {
         // The max value for history. Must be a power of 2 for some gravity formulas, but 16384 is standard.
-        const int MAX_HISTORY = 16384; 
+        const int MAX_HISTORY = Tune::HistoryMax;
         // This is the "gravity" formula. The score moves towards the bonus, but moves slower as it gets closer to MAX_HISTORY.
         currentHistory += bonus - currentHistory * abs(bonus) / MAX_HISTORY;
     }

@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include "../../../spsa/engine/parameters.h"
 
 class TimeManager {
 private:
@@ -41,23 +42,23 @@ public:
         }
 
         // Engine overhead to avoid flagging in fast/bullet time controls
-        long long moveOverhead = 10; 
+        long long moveOverhead = Tune::MoveOverhead;
         timeLeft = std::max(1LL, timeLeft - moveOverhead);
 
         // Estimate moves remaining based on time control type
-        int movesRemaining = (movestogo > 0) ? std::min(movestogo, 50) : 40;
+        int movesRemaining = (movestogo > 0) ? std::min(movestogo, Tune::MovesRemainingCap) : Tune::MovesRemainingDefault;
 
         // Base time allocation calculation
         double baseTime = (double)timeLeft / movesRemaining;
         
         // Calculate optimum and maximum times 
-        optimumTime = static_cast<long long>(baseTime + inc * 0.75);
-        maximumTime = static_cast<long long>(baseTime * 5.0 + inc * 0.75);
+        optimumTime = static_cast<long long>(baseTime + inc * (Tune::TimeIncrement / 100.0));
+        maximumTime = static_cast<long long>(baseTime * (Tune::TimeMaximumFactor / 100.0) + inc * (Tune::TimeIncrement / 100.0));
 
         // Safety cap: never use more than a fraction of the total time left for optimum,
         // and strictly bounded by total time left for maximum.
-        optimumTime = std::min(optimumTime, static_cast<long long>(timeLeft * 0.5));
-        maximumTime = std::min(maximumTime, static_cast<long long>(timeLeft * 0.8));
+        optimumTime = std::min(optimumTime, static_cast<long long>(timeLeft * (Tune::TimeOptimumCap / 100.0)));
+        maximumTime = std::min(maximumTime, static_cast<long long>(timeLeft * (Tune::TimeMaximumCap / 100.0)));
 
         // Ensure strict optimum <= maximum bound
         optimumTime = std::max(1LL, std::min(optimumTime, maximumTime));
@@ -71,7 +72,7 @@ public:
 
     // Extends the soft limit (optimum time) if the search detects instability
     void extendTime() {
-        timeMultiplier = std::min(2.0, timeMultiplier * 1.5);
+        timeMultiplier = std::min(Tune::TimeInstabilityCap / 100.0, timeMultiplier * (Tune::TimeInstabilityFactor / 100.0));
     }
 
     long long elapsed() const {

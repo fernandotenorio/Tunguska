@@ -1,0 +1,741 @@
+# All numeric parameter values use integer UCI wire units.
+# iterations=0 requires --iterations N when starting a production run.
+version = 1
+
+[paths]
+engine = "build/tuning/Tunguska.exe"
+cutechess = 'D:\Downloads\cutechess-1.4.0-win64\cutechess-1.4.0-win64\cutechess-cli.exe'
+openings = 'D:\Downloads\fastchess-windows-x86-64\fastchess-windows-x86-64\books\UHO_Lichess_4852_v1.epd'
+runs = "runs"
+
+[match]
+tc = "10+0.1"
+threads = 1
+hash_mb = 64
+concurrency = 1
+pairs_per_iteration = 8
+startup_timeout = 20
+pair_timeout = 600
+max_moves = 0
+depth = 0
+
+[algorithm]
+iterations = 0
+alpha = 0.602
+gamma = 0.101
+A_ratio = 0.1
+seed = 20260906
+
+[profiles.search]
+selected = ["AspirationDelta", "RFPMargin", "FutilityMargin1", "FutilityMargin2", "FutilityMargin3", "LMRBase", "LMRDivisor", "QDeltaMargin"]
+
+[profiles.pieces]
+selected = ["PawnValue", "KnightValue", "BishopValue", "RookValue", "QueenValue"]
+
+[profiles.time]
+selected = ["MoveOverhead", "MovesRemainingCap", "MovesRemainingDefault", "TimeIncrement", "TimeMaximumFactor", "TimeOptimumCap", "TimeMaximumCap", "TimeInstabilityCap", "TimeInstabilityFactor", "TimeInstabilityDepth"]
+
+[parameters.AspirationDepth]
+default = 3
+engine_min = 1
+engine_max = 8
+scale = 1
+group = "search"
+description = "Full-window search through this depth"
+uci = "SPSA_AspirationDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 1
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.AspirationDelta]
+default = 15
+engine_min = 8
+engine_max = 100
+scale = 1
+group = "search"
+description = "Initial aspiration half-window"
+uci = "SPSA_AspirationDelta"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 15
+min = 8
+max = 100
+c_end = 0.75
+r_end = 0.002
+
+[parameters.AspirationGrowthDivisor]
+default = 2
+engine_min = 1
+engine_max = 8
+scale = 1
+group = "search"
+description = "Integer divisor for aspiration window growth"
+uci = "SPSA_AspirationGrowthDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 2
+min = 1
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.AspirationFallback]
+default = 1000
+engine_min = 100
+engine_max = 3000
+scale = 1
+group = "search"
+description = "Window size triggering full-window fallback"
+uci = "SPSA_AspirationFallback"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 1000
+min = 100
+max = 3000
+c_end = 50.0
+r_end = 0.002
+
+[parameters.IIRDepth]
+default = 4
+engine_min = 4
+engine_max = 10
+scale = 1
+group = "search"
+description = "Minimum depth for internal iterative reduction"
+uci = "SPSA_IIRDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4
+min = 4
+max = 10
+c_end = 0.5
+r_end = 0.002
+
+[parameters.IIRReduction]
+default = 1
+engine_min = 1
+engine_max = 3
+scale = 1
+group = "search"
+description = "Internal iterative reduction without a TT move"
+uci = "SPSA_IIRReduction"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 1
+min = 1
+max = 3
+c_end = 0.5
+r_end = 0.002
+
+[parameters.RFPDepth]
+default = 5
+engine_min = 1
+engine_max = 8
+scale = 1
+group = "search"
+description = "Maximum reverse futility depth; also gates forward futility"
+uci = "SPSA_RFPDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 5
+min = 1
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.RFPMargin]
+default = 120
+engine_min = 30
+engine_max = 300
+scale = 1
+group = "search"
+description = "Reverse futility margin per depth"
+uci = "SPSA_RFPMargin"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 120
+min = 30
+max = 300
+c_end = 6.0
+r_end = 0.002
+
+[parameters.FutilityDepth]
+default = 3
+engine_min = 1
+engine_max = 3
+scale = 1
+group = "search"
+description = "Forward futility depth, bounded by margin table"
+uci = "SPSA_FutilityDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 1
+max = 3
+c_end = 0.5
+r_end = 0.002
+
+[parameters.FutilityMargin1]
+default = 200
+engine_min = 50
+engine_max = 450
+scale = 1
+group = "search"
+description = "Forward futility margin at depth one"
+uci = "SPSA_FutilityMargin1"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 200
+min = 50
+max = 450
+c_end = 10.0
+r_end = 0.002
+
+[parameters.FutilityMargin2]
+default = 300
+engine_min = 100
+engine_max = 650
+scale = 1
+group = "search"
+description = "Forward futility margin at depth two"
+uci = "SPSA_FutilityMargin2"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 300
+min = 100
+max = 650
+c_end = 15.0
+r_end = 0.002
+
+[parameters.FutilityMargin3]
+default = 450
+engine_min = 150
+engine_max = 900
+scale = 1
+group = "search"
+description = "Forward futility margin at depth three"
+uci = "SPSA_FutilityMargin3"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 450
+min = 150
+max = 900
+c_end = 22.5
+r_end = 0.002
+
+[parameters.NullMinDepth]
+default = 3
+engine_min = 2
+engine_max = 8
+scale = 1
+group = "search"
+description = "Minimum null-move depth"
+uci = "SPSA_NullMinDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 2
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.NullEvalDivisor]
+default = 200
+engine_min = 50
+engine_max = 500
+scale = 1
+group = "search"
+description = "Null-move evaluation surplus divisor"
+uci = "SPSA_NullEvalDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 200
+min = 50
+max = 500
+c_end = 10.0
+r_end = 0.002
+
+[parameters.NullEvalCap]
+default = 2
+engine_min = 0
+engine_max = 4
+scale = 1
+group = "search"
+description = "Maximum extra null-move reduction"
+uci = "SPSA_NullEvalCap"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 2
+min = 0
+max = 4
+c_end = 0.5
+r_end = 0.002
+
+[parameters.NullBase]
+default = 3
+engine_min = 1
+engine_max = 6
+scale = 1
+group = "search"
+description = "Base null-move reduction"
+uci = "SPSA_NullBase"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 1
+max = 6
+c_end = 0.5
+r_end = 0.002
+
+[parameters.NullDepthDivisor]
+default = 4
+engine_min = 2
+engine_max = 8
+scale = 1
+group = "search"
+description = "Null-move depth divisor"
+uci = "SPSA_NullDepthDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4
+min = 2
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.CheckExtension]
+default = 1
+engine_min = 0
+engine_max = 1
+scale = 1
+group = "search"
+description = "Check extension in plies"
+uci = "SPSA_CheckExtension"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 1
+min = 0
+max = 1
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMPDepth]
+default = 4
+engine_min = 1
+engine_max = 8
+scale = 1
+group = "search"
+description = "Maximum late move pruning depth"
+uci = "SPSA_LMPDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4
+min = 1
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMPBase]
+default = 3
+engine_min = 1
+engine_max = 12
+scale = 1
+group = "search"
+description = "Constant term of late move pruning threshold"
+uci = "SPSA_LMPBase"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 1
+max = 12
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMPQuadratic]
+default = 4
+engine_min = 1
+engine_max = 12
+scale = 1
+group = "search"
+description = "Quadratic late move pruning coefficient"
+uci = "SPSA_LMPQuadratic"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4
+min = 1
+max = 12
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMRBase]
+default = 75
+engine_min = 0
+engine_max = 200
+scale = 100
+group = "search"
+description = "Logarithmic reduction table intercept"
+uci = "SPSA_LMRBase"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 75
+min = 0
+max = 200
+c_end = 3.75
+r_end = 0.002
+
+[parameters.LMRDivisor]
+default = 225
+engine_min = 100
+engine_max = 500
+scale = 100
+group = "search"
+description = "Logarithmic reduction table divisor"
+uci = "SPSA_LMRDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 225
+min = 100
+max = 500
+c_end = 11.25
+r_end = 0.002
+
+[parameters.LMRDepth]
+default = 3
+engine_min = 2
+engine_max = 8
+scale = 1
+group = "search"
+description = "Minimum late move reduction depth"
+uci = "SPSA_LMRDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 2
+max = 8
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMRMoves]
+default = 3
+engine_min = 1
+engine_max = 12
+scale = 1
+group = "search"
+description = "Number of moves before reductions begin"
+uci = "SPSA_LMRMoves"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 3
+min = 1
+max = 12
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMRKillerAdjustment]
+default = 1
+engine_min = 0
+engine_max = 3
+scale = 1
+group = "search"
+description = "Reduction discount for killer or countermove"
+uci = "SPSA_LMRKillerAdjustment"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 1
+min = 0
+max = 3
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMRPVAdjustment]
+default = 1
+engine_min = 0
+engine_max = 3
+scale = 1
+group = "search"
+description = "Reduction discount in PV nodes"
+uci = "SPSA_LMRPVAdjustment"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 1
+min = 0
+max = 3
+c_end = 0.5
+r_end = 0.002
+
+[parameters.LMRHistoryDivisor]
+default = 4096
+engine_min = 1024
+engine_max = 16384
+scale = 1
+group = "search"
+description = "History score divisor for reduction adjustment"
+uci = "SPSA_LMRHistoryDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4096
+min = 1024
+max = 16384
+c_end = 204.8
+r_end = 0.002
+
+[parameters.HistoryMax]
+default = 16384
+engine_min = 4096
+engine_max = 32768
+scale = 1
+group = "search"
+description = "History gravity limit, greater than bonus cap"
+uci = "SPSA_HistoryMax"
+source = "Tunguska/includes/Engine/Search.h"
+start = 16384
+min = 4096
+max = 32768
+c_end = 819.2
+r_end = 0.002
+
+[parameters.HistoryBonusCap]
+default = 400
+engine_min = 50
+engine_max = 1000
+scale = 1
+group = "search"
+description = "Maximum depth-squared history bonus"
+uci = "SPSA_HistoryBonusCap"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 400
+min = 50
+max = 1000
+c_end = 20.0
+r_end = 0.002
+
+[parameters.QDeltaMargin]
+default = 200
+engine_min = 20
+engine_max = 500
+scale = 1
+group = "search"
+description = "Quiescence delta pruning margin"
+uci = "SPSA_QDeltaMargin"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 200
+min = 20
+max = 500
+c_end = 10.0
+r_end = 0.002
+
+[parameters.MVVAttackerDivisor]
+default = 100
+engine_min = 25
+engine_max = 400
+scale = 1
+group = "search"
+description = "Attacker value divisor inside MVV-LVA capture ordering"
+uci = "SPSA_MVVAttackerDivisor"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 100
+min = 25
+max = 400
+c_end = 5.0
+r_end = 0.002
+
+[parameters.PawnValue]
+default = 100
+engine_min = 50
+engine_max = 200
+scale = 1
+group = "pieces"
+description = "Pawn search material value"
+uci = "SPSA_PawnValue"
+source = "Tunguska/includes/Engine/Evaluation.h"
+start = 100
+min = 50
+max = 200
+c_end = 5.0
+r_end = 0.002
+
+[parameters.KnightValue]
+default = 429
+engine_min = 250
+engine_max = 650
+scale = 1
+group = "pieces"
+description = "Knight search material value"
+uci = "SPSA_KnightValue"
+source = "Tunguska/includes/Engine/Evaluation.h"
+start = 429
+min = 250
+max = 650
+c_end = 21.45
+r_end = 0.002
+
+[parameters.BishopValue]
+default = 439
+engine_min = 250
+engine_max = 650
+scale = 1
+group = "pieces"
+description = "Bishop search material value"
+uci = "SPSA_BishopValue"
+source = "Tunguska/includes/Engine/Evaluation.h"
+start = 439
+min = 250
+max = 650
+c_end = 21.95
+r_end = 0.002
+
+[parameters.RookValue]
+default = 685
+engine_min = 450
+engine_max = 1000
+scale = 1
+group = "pieces"
+description = "Rook search material value"
+uci = "SPSA_RookValue"
+source = "Tunguska/includes/Engine/Evaluation.h"
+start = 685
+min = 450
+max = 1000
+c_end = 34.25
+r_end = 0.002
+
+[parameters.QueenValue]
+default = 1368
+engine_min = 1000
+engine_max = 2000
+scale = 1
+group = "pieces"
+description = "Queen search material value"
+uci = "SPSA_QueenValue"
+source = "Tunguska/includes/Engine/Evaluation.h"
+start = 1368
+min = 1000
+max = 2000
+c_end = 68.4
+r_end = 0.002
+
+[parameters.MoveOverhead]
+default = 10
+engine_min = 0
+engine_max = 100
+scale = 1
+group = "time"
+description = "Milliseconds reserved before time allocation"
+uci = "SPSA_MoveOverhead"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 10
+min = 0
+max = 100
+c_end = 0.5
+r_end = 0.002
+
+[parameters.MovesRemainingCap]
+default = 50
+engine_min = 10
+engine_max = 80
+scale = 1
+group = "time"
+description = "Cap on supplied moves to go"
+uci = "SPSA_MovesRemainingCap"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 50
+min = 10
+max = 80
+c_end = 2.5
+r_end = 0.002
+
+[parameters.MovesRemainingDefault]
+default = 40
+engine_min = 10
+engine_max = 80
+scale = 1
+group = "time"
+description = "Estimated moves remaining with sudden death"
+uci = "SPSA_MovesRemainingDefault"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 40
+min = 10
+max = 80
+c_end = 2.0
+r_end = 0.002
+
+[parameters.TimeIncrement]
+default = 75
+engine_min = 0
+engine_max = 100
+scale = 100
+group = "time"
+description = "Increment contribution to both time budgets"
+uci = "SPSA_TimeIncrement"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 75
+min = 0
+max = 100
+c_end = 3.75
+r_end = 0.002
+
+[parameters.TimeMaximumFactor]
+default = 500
+engine_min = 100
+engine_max = 1000
+scale = 100
+group = "time"
+description = "Base allocation multiplier for hard budget"
+uci = "SPSA_TimeMaximumFactor"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 500
+min = 100
+max = 1000
+c_end = 25.0
+r_end = 0.002
+
+[parameters.TimeOptimumCap]
+default = 50
+engine_min = 5
+engine_max = 80
+scale = 100
+group = "time"
+description = "Fraction of clock allowed for soft budget"
+uci = "SPSA_TimeOptimumCap"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 50
+min = 5
+max = 80
+c_end = 2.5
+r_end = 0.002
+
+[parameters.TimeMaximumCap]
+default = 80
+engine_min = 20
+engine_max = 95
+scale = 100
+group = "time"
+description = "Fraction of clock allowed for hard budget"
+uci = "SPSA_TimeMaximumCap"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 80
+min = 20
+max = 95
+c_end = 4.0
+r_end = 0.002
+
+[parameters.TimeInstabilityCap]
+default = 200
+engine_min = 100
+engine_max = 400
+scale = 100
+group = "time"
+description = "Maximum soft-budget instability multiplier"
+uci = "SPSA_TimeInstabilityCap"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 200
+min = 100
+max = 400
+c_end = 10.0
+r_end = 0.002
+
+[parameters.TimeInstabilityFactor]
+default = 150
+engine_min = 100
+engine_max = 250
+scale = 100
+group = "time"
+description = "Multiplier when the best move changes"
+uci = "SPSA_TimeInstabilityFactor"
+source = "Tunguska/includes/Engine/TimeManager.h"
+start = 150
+min = 100
+max = 250
+c_end = 7.5
+r_end = 0.002
+
+[parameters.TimeInstabilityDepth]
+default = 4
+engine_min = 1
+engine_max = 10
+scale = 1
+group = "time"
+description = "Completed depth before best-move instability extends time"
+uci = "SPSA_TimeInstabilityDepth"
+source = "Tunguska/src/Engine/Search.cpp"
+start = 4
+min = 1
+max = 10
+c_end = 0.5
+r_end = 0.002

@@ -31,6 +31,10 @@ You will need a C++ compiler (g++, Clang, or MSVC) that supports C++17.
 
 **Important Compiler Flags:** For optimal performance, it is crucial to compile with high optimization levels (e.g., `-O3` or `/O2` on Windows) and enable AVX2 instruction set support (e.g., `-mavx2`).
 
+## Local SPSA Tuning
+
+The [SPSA tuner](spsa/README.md) runs local cutechess matches, exposes search/material/time parameters in a separate tuning build, and stores resumable run journals with CSV exports. Start with `python -m spsa.build` and `python -m spsa validate` from the repository root. Normal engine builds retain compile-time defaults and their existing UCI options.
+
 ## Special Thanks
 Special thanks go to the **Chess Programming Wiki** (`https://www.chessprogramming.org/`), which is an invaluable and indispensable resource for developers.
 

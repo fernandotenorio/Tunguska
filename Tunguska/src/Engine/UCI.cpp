@@ -3,6 +3,9 @@
 #include "Engine/Perft.h"
 #include <iostream>
 #include <sstream>
+#ifdef TUNGUSKA_SPSA
+#include "../../../spsa/engine/state.h"
+#endif
 
 std::vector<std::thread> UCI::workers;
 int num_threads = 1;
@@ -19,6 +22,9 @@ void UCI::loop() {
             std::cout << "id author Fernando Mir" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 512" << std::endl;
             std::cout << "option name Hash type spin default 256 min 1 max 8192" << std::endl;
+#ifdef TUNGUSKA_SPSA
+            Tune::printOptions();
+#endif
             std::cout << "uciok" << std::endl;
         }
         else if (line == "isready") {
@@ -95,6 +101,31 @@ void UCI::parseSetOption(std::string line, Board& board, HashTable*& tt) {
     // Convert option name to lowercase for robust matching
     // (Some GUIs send "Threads", others send "threads")
     for (char& c : name) c = std::tolower(c);
+
+#ifdef TUNGUSKA_SPSA
+    if (auto* parameter = Tune::find(name)) {
+        try {
+            size_t end = 0;
+            const int value = std::stoi(valueStr, &end);
+            std::string extra;
+            if (end != valueStr.size() || (ss >> extra) || value < parameter->minimum || value > parameter->maximum)
+                throw std::invalid_argument("invalid tuning value");
+            if (*parameter->value == value) {
+                std::cout << "info string spsa applied " << parameter->name << " " << value << std::endl;
+                return;
+            }
+            Search::stop();
+            for (auto& worker : workers) if (worker.joinable()) worker.join();
+            workers.clear();
+            *parameter->value = value;
+            Tune::refresh(board);
+            std::cout << "info string spsa applied " << parameter->name << " " << value << std::endl;
+        } catch (const std::exception&) {
+            std::cout << "info string spsa rejected " << parameter->name << std::endl;
+        }
+        return;
+    }
+#endif
 
     if (name == "threads") {
         try {
