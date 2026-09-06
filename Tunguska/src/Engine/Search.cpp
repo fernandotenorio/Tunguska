@@ -269,16 +269,23 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
         if (score >= beta) return beta;
     }
 
-    // 7. Move Generation & Sorting
+    // 7. Move Generation & Scoring
     MoveList moves;
     MoveGen::pseudoLegalMoves(&board, side, moves, inCheck);
-    sortMoves(moves, board, pvMove, board.ply, prevMove);
+    int moveScores[Move::MAX_LEGAL_MOVES];
+    scoreMoves(moves, moveScores, board, pvMove, prevMove);
+
+    // Worker roots rotate the fully sorted list; preserve that ordering exactly.
+    const bool eagerRoot = (board.ply == 0 && threadId > 0);
 
     //@begin change
     // Root Move Randomization for Lazy SMP
     // Rotate move list differently per worker thread to diversify search
-    if (board.ply == 0 && threadId > 0) {
+    if (eagerRoot) {
         int count = moves.size();
+        for (int i = 0; i < count - 1; ++i) {
+            pickNextBest(moves, moveScores, i);
+        }
 
         if (count > 1) {
             int offset = threadId % count;
@@ -307,6 +314,7 @@ int Search::alphaBeta(Board& board, int alpha, int beta, int depth, bool doNull,
 
     // 8. Move Loop
     for (int i = 0; i < moves.size(); i++) {
+        if (!eagerRoot) pickNextBest(moves, moveScores, i);
         int move = moves.get(i);
         bool isCounterMove = (move == counterMove);
 
@@ -518,46 +526,32 @@ int Search::scoreMove(const Board& board, int move, int pvMove, int prevMove) {
     return board.searchHistory[board.board[Move::from(move)]][Move::to(move)];
 }
 
-// TODO: pickNextBest, i.e., lazy sorting.
-void Search::sortMoves(MoveList& moves, const Board& board, int pvMove, int ply, int prevMove) {
-    int count = moves.size();
-    
-    // 1. Stack Allocation (Instant)
-    // We use a parallel array to store scores. 
-    // This lives on the CPU stack, not the heap.
-    int scores[Move::MAX_LEGAL_MOVES]; 
-
-    // 2. Score all moves
-    for (int i = 0; i < count; ++i) {
+void Search::scoreMoves(MoveList& moves, int* scores, const Board& board, int pvMove, int prevMove) {
+    // Snapshot scores before searching any children: history can change during recursion.
+    for (int i = 0; i < moves.size(); ++i) {
         scores[i] = scoreMove(board, moves.get(i), pvMove, prevMove);
     }
+}
 
-    // 3. Selection Sort
-    // Finding the best move and swapping it to the front is generally 
-    // faster than std::sort for small arrays (N < 50) because it minimizes data movement.
-    for (int i = 0; i < count - 1; ++i) {
-        int bestIndex = i;
-        int bestScore = scores[i];
+void Search::pickNextBest(MoveList& moves, int* scores, int index) {
+    if (index >= moves.size() - 1) return;
 
-        // Find the move with the highest score in the remaining list
-        for (int j = i + 1; j < count; ++j) {
-            if (scores[j] > bestScore) {
-                bestScore = scores[j];
-                bestIndex = j;
-            }
+    int bestIndex = index;
+    int bestScore = scores[index];
+    // One step of the original selection sort, including its strict tie rule.
+    for (int j = index + 1; j < moves.size(); ++j) {
+        if (scores[j] > bestScore) {
+            bestScore = scores[j];
+            bestIndex = j;
         }
+    }
 
-        // Swap if a better move was found
-        if (bestIndex != i) {
-            // Swap scores in our local array
-            scores[bestIndex] = scores[i];
-            scores[i] = bestScore;
-
-            // Swap moves in the actual MoveList
-            int tempMove = moves.get(i);
-            moves.set(i, moves.get(bestIndex));
-            moves.set(bestIndex, tempMove);
-        }
+    if (bestIndex != index) {
+        scores[bestIndex] = scores[index];
+        scores[index] = bestScore;
+        int tempMove = moves.get(index);
+        moves.set(index, moves.get(bestIndex));
+        moves.set(bestIndex, tempMove);
     }
 }
 
@@ -618,12 +612,14 @@ int Search::quiescence(Board& board, int alpha, int beta) {
         MoveGen::pawnPromotions(&board, side, moves, true);
     }
 
-    // 6. Score and Sort Moves
-    sortMoves(moves, board, Move::NO_MOVE, board.ply, Move::NO_MOVE);
+    // 6. Snapshot scores; select moves only as they are consumed.
+    int moveScores[Move::MAX_LEGAL_MOVES];
+    scoreMoves(moves, moveScores, board, Move::NO_MOVE, Move::NO_MOVE);
 
     int legalMoves = 0;
 
     for (int i = 0; i < moves.size(); i++) {
+        pickNextBest(moves, moveScores, i);
         int move = moves.get(i);
 
         // --- PRUNING (Only when NOT in Check) ---

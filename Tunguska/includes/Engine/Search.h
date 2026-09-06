@@ -56,7 +56,8 @@ private:
     void checkTime();
 
     int scoreMove(const Board& board, int move, int pvMove, int prevMove);
-    void sortMoves(MoveList& moves, const Board& board, int pvMove, int ply, int prevMove);
+    void scoreMoves(MoveList& moves, int* scores, const Board& board, int pvMove, int prevMove);
+    static void pickNextBest(MoveList& moves, int* scores, int index);
 
     inline void updateHistory(int& currentHistory, int bonus) {
         // The max value for history. Must be a power of 2 for some gravity formulas, but 16384 is standard.
