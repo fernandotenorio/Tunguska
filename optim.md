@@ -48,7 +48,7 @@ Keep `makeMove`, the legality result, `legalMovesCount`, and every pruning condi
 
 Initially retain feature extraction before `makeMove`: it needs the parent board. Do not simply move `moveDiffFeatures` below `makeMove`, and do not move pruning ahead of legality counting. Preserve the current killer-table indices and conditions even if they look questionable; correcting them is a separate search change. Lazy accumulators in #2 eventually subsume this benefit.
 
-## 4. Select the next best move on demand instead of fully sorting
+## 4. Select the next best move on demand instead of fully sorting (Done)
 
 **Potential: medium to high. Effort: small to medium. Can preserve the exact move order.**
 
