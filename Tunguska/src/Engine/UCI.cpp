@@ -15,7 +15,7 @@ void UCI::loop() {
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line == "uci") {
-            std::cout << "id name Tunguska 2.1" << std::endl;
+            std::cout << "id name Tunguska 2.2" << std::endl;
             std::cout << "id author Fernando Mir" << std::endl;
             std::cout << "option name Threads type spin default 1 min 1 max 512" << std::endl;
             std::cout << "option name Hash type spin default 256 min 1 max 8192" << std::endl;
