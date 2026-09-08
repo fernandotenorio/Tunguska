@@ -343,13 +343,29 @@ def mix_and_split_bins(input_bins, output_prefix, num_chunks=2):
 if __name__ == "__main__":
   
     binpacks = [
-        # ("../data/binpacks/test80-2024-01-jan-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-01-jan-2tb7p.min-v2.v6.bin"),
-        # ("../data/binpacks/test80-2024-02-feb-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"),
-        # ("../data/binpacks/test80-2024-03-mar-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-03-mar-2tb7p.min-v2.v6.bin"),
-        # ("../data/binpacks/test80-2024-04-apr-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-04-apr-2tb7p.min-v2.v6.bin"),
-        # ("../data/binpacks/test80-2024-05-may-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin"),
-        # ("../data/binpacks/test80-2024-06-jun-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-06-jun-2tb7p.min-v2.v6.bin"),
 
+        # ("../data/binpacks/test77-2021-11-nov-2tb7p.min-v2.plain", "../data/train/test77-2021-11-nov-2tb7p.min-v2.bin"),
+        # ("../data/binpacks/test77-2021-12-dec-16tb7p.v6-dd.min.plain", "../data/train/test77-2021-12-dec-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test77-2022-01-jan-2tb7p.plain", "../data/train/test77-2022-01-jan-2tb7p.bin"),
+
+        # ("../data/binpacks/test78-2022-01-02-janfeb-16tb7p.min.plain", "../data/train/test78-2022-01-02-janfeb-16tb7p.min.bin"),
+        # ("../data/binpacks/test78-2022-01-to-05-jantomay-16tb7p.v6-dd.min.plain", "../data/train/test78-2022-01-to-05-jantomay-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test78-2022-06-to-09-juntosep-16tb7p.v6-dd.min.plain", "../data/train/test78-2022-06-to-09-juntosep-16tb7p.v6-dd.min.bin"),
+
+        # ("../data/binpacks/test79-2022-03-mar-16tb7p.min.plain", "../data/train/test79-2022-03-mar-16tb7p.min.bin"),
+        # ("../data/binpacks/test79-2022-04-apr-12tb7p.min-v2.plain", "../data/train/test79-2022-04-apr-12tb7p.min-v2.bin"),
+        # ("../data/binpacks/test79-2022-05-may-12tb7p.min-v2.plain", "../data/train/test79-2022-05-may-12tb7p.min-v2.bin"),
+
+        # ("../data/binpacks/test80-2022-04-apr-16tb7p.min.plain", "../data/train/test80-2022-04-apr-16tb7p.min.bin"),
+        # ("../data/binpacks/test80-2022-05-may-16tb7p.plain", "../data/train/test80-2022-05-may-16tb7p.bin"),
+        # ("../data/binpacks/test80-2022-06-jun-16tb7p.v6-dd.min.plain", "../data/train/test80-2022-06-jun-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2022-07-jul-16tb7p.v6-dd.min.plain", "../data/train/test80-2022-07-jul-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2022-08-aug-16tb7p.v6-dd.min.plain", "../data/train/test80-2022-08-aug-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2022-09-sep-16tb7p.v6-dd.min.plain", "../data/train/test80-2022-09-sep-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2022-10-oct-16tb7p.v6-dd.plain", "../data/train/test80-2022-10-oct-16tb7p.v6-dd.bin"),
+        # ("../data/binpacks/test80-2022-11-nov-16tb7p.v6-dd.min.plain", "../data/train/test80-2022-11-nov-16tb7p.v6-dd.min.bin"),
+        # ("../data/binpacks/test80-2022-12-dec-16tb7p.min.plain", "../data/train/test80-2022-12-dec-16tb7p.min.bin"),
+        
         # ("../data/binpacks/test80-2023-01-jan-16tb7p.v6-sk20.min.plain", "../data/train/test80-2023-01-jan-16tb7p.v6-sk20.min.bin"),
         # ("../data/binpacks/test80-2023-02-feb-16tb7p.v6-dd.min.plain", "../data/train/test80-2023-02-feb-16tb7p.v6-dd.min.bin"),
         # ("../data/binpacks/test80-2023-03-mar-2tb7p.min.plain", "../data/train/test80-2023-03-mar-2tb7p.min.bin"),
@@ -362,13 +378,24 @@ if __name__ == "__main__":
         # ("../data/binpacks/test80-2023-10-oct-2tb7p.min-v2.v6.plain", "../data/train/test80-2023-10-oct-2tb7p.min-v2.v6.bin"),
         # ("../data/binpacks/test80-2023-11-nov-2tb7p.min-v2.v6.plain", "../data/train/test80-2023-11-nov-2tb7p.min-v2.v6.bin"),
         # ("../data/binpacks/test80-2023-12-dec-2tb7p.min-v2.v6.plain", "../data/train/test80-2023-12-dec-2tb7p.min-v2.v6.bin"),
+
+        # ("../data/binpacks/test80-2024-01-jan-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-01-jan-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-02-feb-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-02-feb-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-03-mar-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-03-mar-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-04-apr-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-04-apr-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-05-may-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-05-may-2tb7p.min-v2.v6.bin"),
+        # ("../data/binpacks/test80-2024-06-jun-2tb7p.min-v2.v6.plain", "../data/train/test80-2024-06-jun-2tb7p.min-v2.v6.bin"),
     ]
+
     # for p, b in binpacks:
     #     convert_binpack_plain(p, b)
 
     bin_files = glob("../data/train/*.bin")
+
+    print(f"Mixing {len(bin_files)}...")
+
     mix_and_split_bins(
         bin_files,
         "../data/train/mixed_train",
-        12
+        15
     )
