@@ -1220,6 +1220,21 @@
     <ClInclude Include="includes\Engine\TimeManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\NNUE\new_e1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\new_e9.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\new_e17.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\new_1536_e1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\NNUE\new_1536_E6.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="perft.txt" />

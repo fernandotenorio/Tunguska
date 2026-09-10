@@ -567,6 +567,11 @@
     <ClInclude Include="includes\Engine\UCI.h" />
     <ClInclude Include="includes\Engine\Zobrist.h" />
     <ClInclude Include="includes\NNUE\FeatureExtractor.h" />
+    <ClInclude Include="includes\NNUE\new_1536_e1.h" />
+    <ClInclude Include="includes\NNUE\new_1536_E6.h" />
+    <ClInclude Include="includes\NNUE\new_e1.h" />
+    <ClInclude Include="includes\NNUE\new_e17.h" />
+    <ClInclude Include="includes\NNUE\new_e9.h" />
     <ClInclude Include="includes\NNUE\NNUEConstants.h" />
     <ClInclude Include="includes\NNUE\nnue_loader.h" />
     <ClInclude Include="includes\NNUE\nnue_weights.h" />
